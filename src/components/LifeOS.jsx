@@ -219,6 +219,7 @@ export default function LifeOS(){
   const [waterLogs,setWaterLogs]=useState(iWater);
   const [waterGoal,setWaterGoal]=useState(3000);
   const [wCustom,setWCustom]=useState('');
+  const [waterDate,setWaterDate]=useState(toDay());
   const [vitamins,setVitamins]=useState(iVits);
   const [vitaminLogs,setVitaminLogs]=useState(iVitLogs);
   const [skinPhotos,setSkinPhotos]=useState({});
@@ -228,6 +229,7 @@ export default function LifeOS(){
   const [journal,setJournal]=useState(iJournal);
   const [jForm,setJForm]=useState({title:'',content:''});
   const [jEditing,setJEditing]=useState(false);
+  const [journalDate,setJournalDate]=useState(toDay());
   const [dsa,setDsa]=useState(iDSA);
   const [dsaForm,setDsaForm]=useState({name:'',source:'LeetCode',link:'',tags:'',difficulty:'Medium',notes:''});
   const [dsaFilter,setDsaFilter]=useState({source:'All',difficulty:'All',tag:''});
@@ -236,6 +238,7 @@ export default function LifeOS(){
   const [perfForm,setPerfForm]=useState({type:'Shadowboxing',notes:''});
   const [weight,setWeight]=useState(iWeight);
   const [wForm,setWForm]=useState({weight:'',note:''});
+  const [weightDate,setWeightDate]=useState(toDay());
   const [companies,setCompanies]=useState(iCompanies);
   const [coForm,setCoForm]=useState({name:'',ctc:'',role:'',status:'Not Applied',note:''});
   const [showCoForm,setShowCoForm]=useState(false);
@@ -247,7 +250,15 @@ export default function LifeOS(){
   const [showIvForm,setShowIvForm]=useState(false);
   const [showVitForm,setShowVitForm]=useState(false);
   const [vitForm,setVitForm]=useState({name:'',dose:'',frequency:'daily',color:C.acc});
+  const [editingVitamin,setEditingVitamin]=useState(null);
   const [expandedTopic,setExpandedTopic]=useState(null);
+
+  const setAllDates=(dateStr)=>{
+    setSelectedDate(dateStr);
+    setWaterDate(dateStr);
+    setJournalDate(dateStr);
+    setWeightDate(dateStr);
+  };
 
   // Load data from Supabase on mount
   useEffect(() => {
@@ -351,10 +362,11 @@ export default function LifeOS(){
     if(['water','weight','vitamin','skin'].includes(v)) setWellnessOpen(true);
     if(['dsa','fundamentals','systemdesign','misc','interview','companies'].includes(v)) setLpaOpen(true);
   };
-  const addWater=async(a)=>{
+  const addWater=async(a,dateOverride)=>{
+    const targetDate=dateOverride||waterDate||todayStr;
     const { data } = await supabase
       .from('water_logs')
-      .insert({ date: todayStr, amount: a, time: nowT() })
+      .insert({ date: targetDate, amount: a, time: nowT() })
       .select()
       .single();
     if (data) setWaterLogs(p=>[...p, data]);
@@ -390,11 +402,12 @@ export default function LifeOS(){
       setPerfForm({type:'Shadowboxing',notes:''});
     }
   };
-  const addWeight=async()=>{
+  const addWeight=async(dateOverride)=>{
     if(!wForm.weight) return;
+    const targetDate = dateOverride || weightDate || todayStr;
     const { data } = await supabase
       .from('weight_logs')
-      .insert({ date: todayStr, weight: parseFloat(wForm.weight), note: wForm.note })
+      .insert({ date: targetDate, weight: parseFloat(wForm.weight), note: wForm.note })
       .select()
       .single();
     if (data) {
@@ -415,9 +428,10 @@ export default function LifeOS(){
       setShowCoForm(false);
     }
   };
-  const saveJournal=async()=>{
+  const saveJournal=async(targetDate)=>{
     if(!jForm.content.trim()) return;
-    const ex=journal.findIndex(e=>e.date===todayStr);
+    const dateToUse = targetDate || journalDate || todayStr;
+    const ex=journal.findIndex(e=>e.date===dateToUse);
     
     if(ex>=0) {
       // Update existing entry
@@ -433,7 +447,7 @@ export default function LifeOS(){
       // Insert new entry
       const { data } = await supabase
         .from('journal_entries')
-        .insert({ date: todayStr, title: jForm.title, content: jForm.content })
+        .insert({ date: dateToUse, title: jForm.title, content: jForm.content })
         .select()
         .single();
       if (data) setJournal(p=>[...p, data]);
@@ -458,18 +472,37 @@ export default function LifeOS(){
       if (data) setVitaminLogs(p=>[...p, data]);
     }
   };
-  const addVitamin=async()=>{
+  const saveVitamin=async()=>{
     if(!vitForm.name.trim()) return;
-    const { data } = await supabase
-      .from('vitamins')
-      .insert({ name: vitForm.name, dose: vitForm.dose, frequency: vitForm.frequency, color: vitForm.color })
-      .select()
-      .single();
-    if (data) {
-      setVitamins(p=>[...p, data]);
-      setVitForm({name:'',dose:'',frequency:'daily',color:C.acc});
-      setShowVitForm(false);
+    if(editingVitamin){
+      const { data } = await supabase
+        .from('vitamins')
+        .update({ name: vitForm.name, dose: vitForm.dose, frequency: vitForm.frequency, color: vitForm.color })
+        .eq('id', editingVitamin.id)
+        .select()
+        .single();
+      if (data) {
+        setVitamins(p=>p.map(v=>v.id===editingVitamin.id?data:v));
+        setEditingVitamin(null);
+      }
+    }else{
+      const { data } = await supabase
+        .from('vitamins')
+        .insert({ name: vitForm.name, dose: vitForm.dose, frequency: vitForm.frequency, color: vitForm.color })
+        .select()
+        .single();
+      if (data) {
+        setVitamins(p=>[...p, data]);
+      }
     }
+    setVitForm({name:'',dose:'',frequency:'daily',color:C.acc});
+    setShowVitForm(false);
+  };
+
+  const deleteVitamin = async (vitamin) => {
+    await supabase.from('vitamins').delete().eq('id', vitamin.id);
+    setVitamins(p => p.filter(v => v.id !== vitamin.id));
+    setVitaminLogs(p => p.filter(l => l.vitaminId !== vitamin.id));
   };
   const handleSkin=(e,date)=>{const f=e.target.files[0];if(!f) return;uploadSkin(f,date);};
   const saveSD=async()=>{
@@ -601,36 +634,76 @@ export default function LifeOS(){
   };
 
   const VWater=()=>{
-    const todayLog=waterLogs.filter(l=>l.date===todayStr).sort((a,b)=>a.time<b.time?-1:1);
+    const activeDate = waterDate || todayStr;
+    const activeLogs = waterLogs.filter(l=>l.date===activeDate).sort((a,b)=>a.time<b.time?-1:1);
     const selLog=waterLogs.filter(l=>l.date===selectedDate);
     return(<div>
       <PH title='Water' right={<Badge color={waterPct>=100?'suc':'acc'}>{waterPct}% of goal</Badge>}/>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px'}}>
         <div>
           <Card style={{marginBottom:'12px'}}>
-            <SLabel>Today — {todayWater}ml / {waterGoal}ml</SLabel>
+            <SLabel>{activeDate===todayStr?'Today':fmtLong(activeDate)} — {waterLogs.filter(l=>l.date===activeDate).reduce((s,l)=>s+l.amount,0)}ml / {waterGoal}ml</SLabel>
             <div style={{background:C.bord,borderRadius:'999px',height:'8px',marginBottom:'16px',overflow:'hidden'}}>
               <div style={{background:`linear-gradient(90deg,${C.acc},${C.blue})`,height:'100%',width:`${waterPct}%`,borderRadius:'999px',transition:'width 0.4s'}}/>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'10px'}}>
               {[200,300,500].map(a=><button key={a} onClick={()=>addWater(a)} style={{background:C.accBg,border:`1px solid ${C.accBord}`,borderRadius:'8px',color:C.acc,fontFamily:'inherit',fontWeight:700,fontSize:'14px',padding:'12px 0',cursor:'pointer'}}>+{a}</button>)}
             </div>
-            <div style={{display:'flex',gap:'8px'}}>
+            <div style={{display:'flex',gap:'8px',marginBottom:'8px'}}>
               <Input type='number' value={wCustom} onChange={setWCustom} placeholder='Custom ml'/>
               <Btn onClick={()=>{if(wCustom){addWater(parseInt(wCustom));setWCustom('')}}}>Add</Btn>
             </div>
+            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+              <span style={{color:C.mut,fontSize:'11px'}}>For date:</span>
+              <Input type='date' value={waterDate} onChange={setWaterDate} style={{maxWidth:'150px'}}/>
+            </div>
           </Card>
           <Card>
-            <SLabel>Today's log</SLabel>
-            {todayLog.length===0?<div style={{color:C.mut,textAlign:'center',padding:'10px 0'}}>Nothing yet</div>
-            :todayLog.map((l,i)=><div key={l.id} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:i<todayLog.length-1?`1px solid ${C.bord}`:'none'}}>
-              <span style={{fontWeight:600}}>{l.amount} ml</span>
-              <span style={{color:C.mut,fontSize:'12px',fontFamily:"'JetBrains Mono',monospace"}}>{l.time}</span>
+            <SLabel>Log for {activeDate===todayStr?'today':fmt(activeDate)}</SLabel>
+            {activeLogs.length===0?<div style={{color:C.mut,textAlign:'center',padding:'10px 0'}}>Nothing yet</div>
+            :activeLogs.map((l,i)=><div key={l.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:i<activeLogs.length-1?`1px solid ${C.bord}`:'none'}}>
+              <div>
+                <span style={{fontWeight:600}}>{l.amount} ml</span>
+                <span style={{color:C.mut,fontSize:'12px',fontFamily:"'JetBrains Mono',monospace",marginLeft:'6px'}}>{l.time}</span>
+              </div>
+              <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
+                <button
+                  onClick={async()=>{
+                    const nextAmountStr = window.prompt('New amount (ml)', String(l.amount));
+                    if(!nextAmountStr) return;
+                    const nextAmount = parseInt(nextAmountStr,10);
+                    if(Number.isNaN(nextAmount) || nextAmount<=0) return;
+                    const { data } = await supabase
+                      .from('water_logs')
+                      .update({ amount: nextAmount })
+                      .eq('id', l.id)
+                      .select()
+                      .single();
+                    if(data){
+                      setWaterLogs(p=>p.map(x=>x.id===l.id?data:x));
+                    }
+                  }}
+                  style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,cursor:'pointer',fontSize:'11px',padding:'2px 6px'}}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={async()=>{
+                    const ok = window.confirm('Delete this entry?');
+                    if(!ok) return;
+                    await supabase.from('water_logs').delete().eq('id', l.id);
+                    setWaterLogs(p=>p.filter(x=>x.id!==l.id));
+                  }}
+                  style={{background:'transparent',border:'none',color:C.dan,cursor:'pointer',fontSize:'13px'}}
+                >
+                  ✕
+                </button>
+              </div>
             </div>)}
           </Card>
         </div>
         <div>
-          <Cal activeDates={[...new Set(waterLogs.map(l=>l.date))]} selectedDate={selectedDate} onSelect={setSelectedDate} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr}/>
+          <Cal activeDates={[...new Set(waterLogs.map(l=>l.date))]} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr}/>
           {selectedDate&&selectedDate!==todayStr&&<Card style={{marginTop:'10px'}}>
             <SLabel>{fmt(selectedDate)}</SLabel>
             {selLog.length===0?<div style={{color:C.mut}}>No entries</div>:<>
@@ -653,9 +726,13 @@ export default function LifeOS(){
     const last7=Array.from({length:7},(_,i)=>daysAgo(6-i));
     const isTaken=(vitId,date)=>vitaminLogs.some(l=>l.vitaminId===vitId&&l.date===date);
     return(<div>
-      <PH title='Vitamins' right={<Btn size='sm' onClick={()=>setShowVitForm(f=>!f)}>+ Add Vitamin</Btn>}/>
+      <PH title='Vitamins' right={<Btn size='sm' onClick={()=>{
+        setEditingVitamin(null);
+        setVitForm({name:'',dose:'',frequency:'daily',color:C.acc});
+        setShowVitForm(f=>!f);
+      }}>+ Add Vitamin</Btn>}/>
       {showVitForm&&<Card style={{marginBottom:'16px'}}>
-        <SLabel>New vitamin</SLabel>
+        <SLabel>{editingVitamin?'Edit vitamin':'New vitamin'}</SLabel>
         <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:'8px',marginBottom:'8px'}}>
           <Input value={vitForm.name} onChange={v=>setVitForm(f=>({...f,name:v}))} placeholder='Vitamin name *'/>
           <Input value={vitForm.dose} onChange={v=>setVitForm(f=>({...f,dose:v}))} placeholder='Dose'/>
@@ -665,7 +742,7 @@ export default function LifeOS(){
           <span style={{color:C.mut,fontSize:'11px',marginRight:'4px'}}>Color:</span>
           {[C.acc,C.suc,C.war,C.dan,C.blue,C.pink].map(col=><div key={col} onClick={()=>setVitForm(f=>({...f,color:col}))} style={{width:'22px',height:'22px',borderRadius:'50%',background:col,cursor:'pointer',border:vitForm.color===col?'2px solid #fff':'2px solid transparent',transition:'transform 0.1s',transform:vitForm.color===col?'scale(1.2)':'none'}}/>)}
         </div>
-        <div style={{display:'flex',gap:'8px'}}><Btn onClick={addVitamin} disabled={!vitForm.name.trim()}>Save</Btn><Btn onClick={()=>setShowVitForm(false)} variant='ghost'>Cancel</Btn></div>
+        <div style={{display:'flex',gap:'8px'}}><Btn onClick={saveVitamin} disabled={!vitForm.name.trim()}>{editingVitamin?'Update':'Save'}</Btn><Btn onClick={()=>{setShowVitForm(false);setEditingVitamin(null);}} variant='ghost'>Cancel</Btn></div>
       </Card>}
       <Card style={{marginBottom:'16px',overflowX:'auto'}}>
         <SLabel>This week</SLabel>
@@ -678,9 +755,29 @@ export default function LifeOS(){
           </tr></thead>
           <tbody>{vitamins.map(v=><tr key={v.id} style={{borderTop:`1px solid ${C.bord}`}}>
             <td style={{padding:'10px 8px'}}>
-              <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                <div style={{width:'8px',height:'8px',borderRadius:'50%',background:v.color,flexShrink:0}}/>
-                <div><div style={{fontWeight:600,fontSize:'13px'}}>{v.name}</div><div style={{fontSize:'10px',color:C.mut}}>{v.dose} · {v.frequency}</div></div>
+              <div style={{display:'flex',alignItems:'center',gap:'8px',justifyContent:'space-between'}}>
+                <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                  <div style={{width:'8px',height:'8px',borderRadius:'50%',background:v.color,flexShrink:0}}/>
+                  <div><div style={{fontWeight:600,fontSize:'13px'}}>{v.name}</div><div style={{fontSize:'10px',color:C.mut}}>{v.dose} · {v.frequency}</div></div>
+                </div>
+                <div style={{display:'flex',gap:'4px'}}>
+                  <button
+                    onClick={()=>{
+                      setEditingVitamin(v);
+                      setVitForm({name:v.name,dose:v.dose,frequency:v.frequency,color:v.color});
+                      setShowVitForm(true);
+                    }}
+                    style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 6px',cursor:'pointer'}}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={()=>{if(window.confirm('Delete this vitamin and its logs?')) deleteVitamin(v);}}
+                    style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.dan,fontSize:'11px',padding:'3px 6px',cursor:'pointer'}}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </td>
             {last7.map(d=>{const taken=isTaken(v.id,d);return<td key={d} style={{textAlign:'center',padding:'10px 6px'}}>
@@ -743,7 +840,7 @@ export default function LifeOS(){
             </Card>
           </div>
           <div>
-            <Cal activeDates={Object.keys(skinPhotos)} selectedDate={selectedDate} onSelect={setSelectedDate} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.pink}/>
+            <Cal activeDates={Object.keys(skinPhotos)} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.pink}/>
             {selectedDate&&skinPhotos[selectedDate]&&selectedDate!==todayStr&&<Card style={{marginTop:'10px'}}>
               <SLabel>{fmtLong(selectedDate)}</SLabel>
               <img src={skinPhotos[selectedDate]} alt='' style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:'8px'}}/>
@@ -789,7 +886,7 @@ export default function LifeOS(){
           </Card>}
         </div>
         <div>
-          <Cal activeDates={activeDates} selectedDate={selectedDate} onSelect={setSelectedDate} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.suc}/>
+          <Cal activeDates={activeDates} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.suc}/>
           {selLogs.length>0&&selectedDate!==todayStr&&<Card style={{marginTop:'10px'}}>
             <SLabel>{fmtLong(selectedDate)}</SLabel>
             {selLogs.map((l,i)=><div key={l.id} style={{padding:'10px 0',borderBottom:i<selLogs.length-1?`1px solid ${C.bord}`:'none'}}>
@@ -1037,9 +1134,10 @@ export default function LifeOS(){
           <Card>
             <SLabel>Log weight</SLabel>
             <div style={{display:'grid',gap:'8px'}}>
+              <Input type='date' value={weightDate} onChange={v=>setWeightDate(v)} placeholder=''/>
               <Input type='number' value={wForm.weight} onChange={v=>setWForm(f=>({...f,weight:v}))} placeholder='Weight in kg'/>
               <Input value={wForm.note} onChange={v=>setWForm(f=>({...f,note:v}))} placeholder='Note (optional)'/>
-              <Btn onClick={addWeight} disabled={!wForm.weight} full>Log</Btn>
+              <Btn onClick={()=>addWeight()} disabled={!wForm.weight} full>Log</Btn>
             </div>
           </Card>
         </div>
@@ -1051,7 +1149,19 @@ export default function LifeOS(){
               <span style={{color:C.mut,fontSize:'13px'}}> kg</span>
               {l.note&&<div style={{color:C.mut,fontSize:'11px'}}>{l.note}</div>}
             </div>
-            <div style={{color:C.mut,fontSize:'12px',fontFamily:"'JetBrains Mono',monospace"}}>{fmt(l.date)}</div>
+            <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+              <span style={{color:C.mut,fontSize:'12px',fontFamily:"'JetBrains Mono',monospace"}}>{fmt(l.date)}</span>
+              <button
+                onClick={async()=>{
+                  if(!window.confirm('Delete this weight entry?')) return;
+                  await supabase.from('weight_logs').delete().eq('id', l.id);
+                  setWeight(p=>p.filter(x=>x.id!==l.id));
+                }}
+                style={{background:'transparent',border:'none',color:C.dan,cursor:'pointer',fontSize:'13px'}}
+              >
+                ✕
+              </button>
+            </div>
           </div>)}
         </Card>
       </div>
@@ -1067,27 +1177,65 @@ export default function LifeOS(){
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px'}}>
         <div>
           <Card>
-            <SLabel>{showForm?(todayEntry?'Edit today':'New entry — '+fmtLong(todayStr)):'Today — '+fmtLong(todayStr)}</SLabel>
+            <SLabel>{showForm?(todayEntry?'Edit entry':'New entry'): 'Today — '+fmtLong(todayStr)}</SLabel>
             {showForm?<div style={{display:'grid',gap:'8px'}}>
+              <Input type='date' value={journalDate} onChange={v=>setJournalDate(v)} placeholder=''/>
               <Input value={jForm.title} onChange={v=>setJForm(f=>({...f,title:v}))} placeholder='Title (optional)'/>
               <Textarea value={jForm.content} onChange={v=>setJForm(f=>({...f,content:v}))} placeholder={'What happened today?\nHow do you feel?\nWhat are you working towards?'} rows={8}/>
               <div style={{display:'flex',gap:'8px'}}>
-                <Btn onClick={saveJournal} disabled={!jForm.content.trim()} full>Save</Btn>
-                {todayEntry&&<Btn onClick={()=>{setJEditing(false);setJForm({title:'',content:''});}} variant='ghost'>Cancel</Btn>}
+                <Btn onClick={()=>saveJournal(journalDate)} disabled={!jForm.content.trim()} full>Save</Btn>
+                {todayEntry&&<Btn onClick={()=>{setJEditing(false);setJForm({title:'',content:''});setJournalDate(todayStr);}} variant='ghost'>Cancel</Btn>}
               </div>
             </div>:<div>
               {todayEntry.title&&<div style={{fontWeight:700,fontSize:'15px',marginBottom:'10px'}}>{todayEntry.title}</div>}
               <div style={{color:C.mut,fontSize:'13px',lineHeight:1.8,whiteSpace:'pre-wrap',marginBottom:'16px'}}>{todayEntry.content}</div>
-              <Btn onClick={()=>{setJForm({title:todayEntry.title,content:todayEntry.content});setJEditing(true);}} variant='ghost' size='sm'>Edit</Btn>
+              <div style={{display:'flex',gap:'8px'}}>
+                <Btn onClick={()=>{setJForm({title:todayEntry.title,content:todayEntry.content});setJournalDate(todayStr);setJEditing(true);}} variant='ghost' size='sm'>Edit</Btn>
+                <Btn
+                  onClick={async()=>{
+                    if(!window.confirm('Delete today\'s entry?')) return;
+                    await supabase.from('journal_entries').delete().eq('id', todayEntry.id);
+                    setJournal(p=>p.filter(e=>e.id!==todayEntry.id));
+                  }}
+                  variant='ghost'
+                  size='sm'
+                >
+                  Delete
+                </Btn>
+              </div>
             </div>}
           </Card>
         </div>
         <div>
-          <Cal activeDates={journal.map(e=>e.date)} selectedDate={selectedDate} onSelect={setSelectedDate} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.war}/>
+          <Cal activeDates={journal.map(e=>e.date)} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.war}/>
           {selEntry&&selectedDate!==todayStr&&<Card style={{marginTop:'10px'}}>
             <SLabel>{fmtLong(selectedDate)}</SLabel>
             {selEntry.title&&<div style={{fontWeight:700,fontSize:'14px',marginBottom:'8px'}}>{selEntry.title}</div>}
-            <div style={{color:C.mut,fontSize:'13px',lineHeight:1.8,whiteSpace:'pre-wrap'}}>{selEntry.content}</div>
+            <div style={{color:C.mut,fontSize:'13px',lineHeight:1.8,whiteSpace:'pre-wrap',marginBottom:'12px'}}>{selEntry.content}</div>
+            <div style={{display:'flex',gap:'8px'}}>
+              <Btn
+                onClick={()=>{
+                  setJForm({title:selEntry.title,content:selEntry.content});
+                  setJournalDate(selectedDate);
+                  setJEditing(true);
+                }}
+                variant='ghost'
+                size='sm'
+              >
+                Edit
+              </Btn>
+              <Btn
+                onClick={async()=>{
+                  if(!window.confirm('Delete this entry?')) return;
+                  await supabase.from('journal_entries').delete().eq('id', selEntry.id);
+                  setJournal(p=>p.filter(e=>e.id!==selEntry.id));
+                }}
+                variant='ghost'
+                size='sm'
+              >
+                Delete
+              </Btn>
+            </div>
           </Card>}
         </div>
       </div>
