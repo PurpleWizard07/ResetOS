@@ -16,6 +16,7 @@ const daysAgo=(n)=>{const d=new Date();d.setDate(d.getDate()-n);return d.toISOSt
 const fmt=(d)=>new Date(d+'T00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
 const fmtLong=(d)=>new Date(d+'T00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
 const nowT=()=>new Date().toTimeString().slice(0,5);
+const shiftDate=(dStr,delta)=>{const d=new Date(dStr+'T00:00');d.setDate(d.getDate()+delta);return d.toISOString().split('T')[0];};
 const iD=(n)=>Date.now()-n*1000;
 const getDayName=(n)=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][n];
 
@@ -252,6 +253,7 @@ export default function LifeOS(){
   const [vitForm,setVitForm]=useState({name:'',dose:'',frequency:'daily',color:C.acc});
   const [editingVitamin,setEditingVitamin]=useState(null);
   const [expandedTopic,setExpandedTopic]=useState(null);
+  const [vitWeekAnchor,setVitWeekAnchor]=useState(toDay());
 
   const setAllDates=(dateStr)=>{
     setSelectedDate(dateStr);
@@ -301,10 +303,11 @@ export default function LifeOS(){
         if (systemDesignRes.data) setSystemDesign(systemDesignRes.data);
         if (interviewsRes.data) setInterviews(interviewsRes.data);
         
-        // Convert skin photos array to map { date: photo_url }
+        // Convert skin photos array to map { date: url }
         if (skinPhotosRes.data) {
           const photoMap = skinPhotosRes.data.reduce((acc, row) => {
-            acc[row.date] = row.photo_url;
+            const url = row.photo_url || row.url || row.image_url || row.path;
+            if (url) acc[row.date] = url;
             return acc;
           }, {});
           setSkinPhotos(photoMap);
@@ -319,6 +322,10 @@ export default function LifeOS(){
   // Upload skin photo to Supabase Storage
   const uploadSkin = async (file, date) => {
     try {
+      // Optimistic local preview so you immediately see the photo
+      const localUrl = URL.createObjectURL(file);
+      setSkinPhotos(p => ({ ...p, [date]: localUrl }));
+
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('skin-photos')
@@ -723,8 +730,35 @@ export default function LifeOS(){
   };
 
   const VVitamin=()=>{
-    const last7=Array.from({length:7},(_,i)=>daysAgo(6-i));
+    const last7=Array.from({length:7},(_,i)=>shiftDate(vitWeekAnchor, i-6));
     const isTaken=(vitId,date)=>vitaminLogs.some(l=>l.vitaminId===vitId&&l.date===date);
+
+    const parseFrequencyDays = (freq) => {
+      if (!freq) return new Set();
+      const f = freq.toLowerCase().trim();
+      if (!f) return new Set();
+      const codes = ['sun','mon','tue','wed','thu','fri','sat'];
+      if (f.includes('daily')) return new Set(codes);
+      if (f.includes('weekday')) return new Set(['mon','tue','wed','thu','fri']);
+      if (f.includes('weekend')) return new Set(['sat','sun']);
+      const tokens = f.split(/[, ]+/).map(t=>t.trim()).filter(Boolean);
+      const set = new Set();
+      tokens.forEach(t=>{
+        const match = codes.find(c=>c.startsWith(t.slice(0,3)));
+        if (match) set.add(match);
+      });
+      return set;
+    };
+
+    const matchesFrequency = (freq, dateStr) => {
+      const selected = parseFrequencyDays(freq);
+      if (!selected.size) return true; // no frequency configured -> track everyday
+      const d = new Date(dateStr + 'T00:00');
+      const dayIdx = d.getDay();
+      const codes = ['sun','mon','tue','wed','thu','fri','sat'];
+      const day = codes[dayIdx];
+      return selected.has(day);
+    };
     return(<div>
       <PH title='Vitamins' right={<Btn size='sm' onClick={()=>{
         setEditingVitamin(null);
@@ -733,20 +767,91 @@ export default function LifeOS(){
       }}>+ Add Vitamin</Btn>}/>
       {showVitForm&&<Card style={{marginBottom:'16px'}}>
         <SLabel>{editingVitamin?'Edit vitamin':'New vitamin'}</SLabel>
-        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:'8px',marginBottom:'8px'}}>
           <Input value={vitForm.name} onChange={v=>setVitForm(f=>({...f,name:v}))} placeholder='Vitamin name *'/>
           <Input value={vitForm.dose} onChange={v=>setVitForm(f=>({...f,dose:v}))} placeholder='Dose'/>
-          <Sel value={vitForm.frequency} onChange={v=>setVitForm(f=>({...f,frequency:v}))} options={['daily','Mon,Wed,Fri','Tue,Thu,Sat','weekdays','weekends']}/>
         </div>
-        <div style={{display:'flex',gap:'6px',marginBottom:'10px',alignItems:'center'}}>
-          <span style={{color:C.mut,fontSize:'11px',marginRight:'4px'}}>Color:</span>
-          {[C.acc,C.suc,C.war,C.dan,C.blue,C.pink].map(col=><div key={col} onClick={()=>setVitForm(f=>({...f,color:col}))} style={{width:'22px',height:'22px',borderRadius:'50%',background:col,cursor:'pointer',border:vitForm.color===col?'2px solid #fff':'2px solid transparent',transition:'transform 0.1s',transform:vitForm.color===col?'scale(1.2)':'none'}}/>)}
+        <div style={{marginBottom:'10px'}}>
+          <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Frequency — pick days you expect to take</div>
+          {(() => {
+            const codes = ['mon','tue','wed','thu','fri','sat','sun'];
+            const labels = ['M','T','W','T','F','S','S'];
+            const selected = parseFrequencyDays(vitForm.frequency || '');
+            const toggleDay = (code) => {
+              const next = new Set(selected);
+              if (next.has(code)) next.delete(code); else next.add(code);
+              const ordered = codes.filter(c=>next.has(c));
+              const value = ordered.length===7 ? 'daily' : ordered.join(',');
+              setVitForm(f=>({...f,frequency:value}));
+            };
+            const setPreset = (type) => {
+              if (type==='clear') {
+                setVitForm(f=>({...f,frequency:''}));
+              } else if (type==='daily') {
+                setVitForm(f=>({...f,frequency:'daily'}));
+              } else if (type==='weekdays') {
+                setVitForm(f=>({...f,frequency:'mon,tue,wed,thu,fri'}));
+              } else if (type==='weekends') {
+                setVitForm(f=>({...f,frequency:'sat,sun'}));
+              }
+            };
+            return (
+              <>
+                <div style={{display:'flex',gap:'4px',marginBottom:'6px'}}>
+                  {codes.map((code,idx)=>(
+                    <button
+                      key={code}
+                      type='button'
+                      onClick={()=>toggleDay(code)}
+                      style={{
+                        flex:1,
+                        padding:'6px 0',
+                        borderRadius:'6px',
+                        border:`1px solid ${selected.has(code)?C.acc:C.bord}`,
+                        background:selected.has(code)?C.accBg:C.high,
+                        color:selected.has(code)?C.acc:C.mut,
+                        fontSize:'11px',
+                        cursor:'pointer'
+                      }}
+                    >
+                      {labels[idx]}
+                    </button>
+                  ))}
+                </div>
+                <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                  <button type='button' onClick={()=>setPreset('daily')} style={{border:'none',background:'transparent',color:C.mut,fontSize:'11px',cursor:'pointer'}}>Daily</button>
+                  <button type='button' onClick={()=>setPreset('weekdays')} style={{border:'none',background:'transparent',color:C.mut,fontSize:'11px',cursor:'pointer'}}>Weekdays</button>
+                  <button type='button' onClick={()=>setPreset('weekends')} style={{border:'none',background:'transparent',color:C.mut,fontSize:'11px',cursor:'pointer'}}>Weekends</button>
+                  <button type='button' onClick={()=>setPreset('clear')} style={{border:'none',background:'transparent',color:C.mut,fontSize:'11px',cursor:'pointer'}}>Clear</button>
+                </div>
+              </>
+            );
+          })()}
         </div>
         <div style={{display:'flex',gap:'8px'}}><Btn onClick={saveVitamin} disabled={!vitForm.name.trim()}>{editingVitamin?'Update':'Save'}</Btn><Btn onClick={()=>{setShowVitForm(false);setEditingVitamin(null);}} variant='ghost'>Cancel</Btn></div>
       </Card>}
       <Card style={{marginBottom:'16px',overflowX:'auto'}}>
         <SLabel>This week</SLabel>
-        <table style={{width:'100%',borderCollapse:'collapse',minWidth:'500px'}}>
+        {last7.length===7&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',color:C.mut,fontSize:'11px'}}>
+          <span>Week {fmt(last7[0])} – {fmt(last7[6])}</span>
+          <div style={{display:'flex',gap:'6px'}}>
+            <button
+              type='button'
+              onClick={()=>setVitWeekAnchor(shiftDate(vitWeekAnchor,-7))}
+              style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}
+            >
+              ‹ Prev
+            </button>
+            <button
+              type='button'
+              onClick={()=>setVitWeekAnchor(shiftDate(vitWeekAnchor,7))}
+              style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}
+            >
+              Next ›
+            </button>
+          </div>
+        </div>}
+        <table style={{width:'100%',borderCollapse:'collapse',minWidth:'800px'}}>
           <thead><tr>
             <th style={{color:C.mut,fontSize:'11px',textAlign:'left',padding:'4px 8px',fontWeight:600,width:'180px'}}>Supplement</th>
             {last7.map(d=>{const dt=new Date(d+'T00:00');return<th key={d} style={{color:d===todayStr?C.text:C.mut,fontSize:'10px',textAlign:'center',padding:'4px 6px',fontWeight:d===todayStr?700:500}}>
@@ -756,9 +861,9 @@ export default function LifeOS(){
           <tbody>{vitamins.map(v=><tr key={v.id} style={{borderTop:`1px solid ${C.bord}`}}>
             <td style={{padding:'10px 8px'}}>
               <div style={{display:'flex',alignItems:'center',gap:'8px',justifyContent:'space-between'}}>
-                <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                  <div style={{width:'8px',height:'8px',borderRadius:'50%',background:v.color,flexShrink:0}}/>
-                  <div><div style={{fontWeight:600,fontSize:'13px'}}>{v.name}</div><div style={{fontSize:'10px',color:C.mut}}>{v.dose} · {v.frequency}</div></div>
+                <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
+                  <div style={{fontWeight:600,fontSize:'13px'}}>{v.name}</div>
+                  <div style={{fontSize:'10px',color:C.mut}}>{v.dose}{v.frequency ? ` · ${v.frequency}` : ''}</div>
                 </div>
                 <div style={{display:'flex',gap:'4px'}}>
                   <button
@@ -780,21 +885,57 @@ export default function LifeOS(){
                 </div>
               </div>
             </td>
-            {last7.map(d=>{const taken=isTaken(v.id,d);return<td key={d} style={{textAlign:'center',padding:'10px 6px'}}>
-              <button onClick={()=>toggleVit(v.id,d)} style={{width:'26px',height:'26px',borderRadius:'7px',border:'none',background:taken?v.color+'22':C.bord,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}>
-                {taken?<span style={{color:v.color,fontSize:'13px',fontWeight:700}}>✓</span>:<span style={{color:C.mut,fontSize:'10px'}}>·</span>}
-              </button>
+            {last7.map(d=>{
+              const taken=isTaken(v.id,d);
+              const expected = matchesFrequency(v.frequency, d);
+              const baseBorder = expected ? `1px solid ${C.bord}` : `1px dashed ${C.bord}`;
+              const baseOpacity = expected ? 1 : 0.35;
+              const bg = taken ? C.acc : 'transparent';
+              const color = taken ? '#fff' : C.mut;
+              const cellOpacity = taken ? 1 : baseOpacity;
+              return<td
+                key={d}
+                style={{
+                  textAlign:'center',
+                  padding:'10px 6px',
+                  opacity:cellOpacity,
+                  borderLeft:baseBorder,
+                  borderRight:baseBorder
+                }}>
+                <button
+                  onClick={()=>toggleVit(v.id,d)}
+                  style={{
+                    width:'28px',
+                    height:'28px',
+                    borderRadius:'7px',
+                    border: taken ? `1px solid ${C.accBord}` : baseBorder,
+                    background:bg,
+                    cursor:'pointer',
+                    display:'inline-flex',
+                    alignItems:'center',
+                    justifyContent:'center',
+                    transition:'all 0.15s',
+                    fontSize:'14px',
+                    color
+                  }}>
+                  {taken ? '✓' : '·'}
+                </button>
             </td>;})}
           </tr>)}</tbody>
         </table>
       </Card>
       <SLabel>Today</SLabel>
       <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'8px'}}>
-        {vitamins.map(v=>{const taken=isTaken(v.id,todayStr);return<Card key={v.id} onClick={()=>toggleVit(v.id,todayStr)} style={{padding:'14px',cursor:'pointer',display:'flex',alignItems:'center',gap:'12px',background:taken?`${v.color}11`:C.surf,border:`1px solid ${taken?v.color+'44':C.bord}`,transition:'all 0.15s'}}>
-          <div style={{width:'32px',height:'32px',borderRadius:'8px',background:`${v.color}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px',flexShrink:0}}>
-            {taken?<span style={{color:v.color,fontWeight:800}}>✓</span>:<span style={{color:C.mut}}>○</span>}
+        {vitamins.map(v=>{const taken=isTaken(v.id,todayStr);return<Card key={v.id} onClick={()=>toggleVit(v.id,todayStr)} style={{padding:'14px',cursor:'pointer',display:'flex',alignItems:'center',gap:'12px',background:taken?C.accBg:C.surf,border:`1px solid ${taken?C.accBord:C.bord}`,transition:'all 0.15s'}}>
+          <div style={{width:'32px',height:'32px',borderRadius:'8px',background:C.high,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px',flexShrink:0}}>
+            {taken?<span style={{color:C.acc,fontWeight:800}}>✓</span>:<span style={{color:C.mut}}>○</span>}
           </div>
-          <div><div style={{fontWeight:700,fontSize:'13px',color:taken?C.text:C.mut}}>{v.name}</div><div style={{fontSize:'11px',color:taken?v.color:C.mut}}>{v.dose} · {taken?'Taken ✓':'Tap to mark'}</div></div>
+          <div>
+            <div style={{fontWeight:700,fontSize:'13px',color:taken?C.text:C.mut}}>{v.name}</div>
+            <div style={{fontSize:'11px',color:taken?C.acc:C.mut}}>
+              {v.dose}{v.frequency ? ` · ${v.frequency}` : ''} · {taken?'Taken ✓':'Tap to mark'}
+            </div>
+          </div>
         </Card>;})}
       </div>
     </div>);
