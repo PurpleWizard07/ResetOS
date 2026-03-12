@@ -1095,13 +1095,22 @@ export default function LifeOS(){
   };
 
   const views={
-    dashboard:<VDashboard/>,water:<VWater/>,weight:<VWeight/>,vitamin:<VVitamin/>,skin:<VSkin/>,
-    strength:<VStrength/>,dsa:<VDSA/>,
-    fundamentals:<VNotes data={iFundamentals} title='Fundamentals'/>,
-    systemdesign:<VSystemDesign/>,
-    misc:<VNotes data={iMisc} title='Miscellaneous'/>,
-    interview:<VInterview/>,companies:<VCompanies/>,journal:<VJournal/>,
+    dashboard: VDashboard,
+    water: VWater,
+    weight: VWeight,
+    vitamin: VVitamin,
+    skin: VSkin,
+    strength: VStrength,
+    dsa: VDSA,
+    fundamentals: () => <VNotes data={iFundamentals} title='Fundamentals'/>,
+    systemdesign: VSystemDesign,
+    misc: () => <VNotes data={iMisc} title='Miscellaneous'/>,
+    interview: VInterview,
+    companies: VCompanies,
+    journal: VJournal,
   };
+
+  const ActiveView = views[view] || VDashboard;
 
   return(<>
     <style>{`
@@ -1118,9 +1127,9 @@ export default function LifeOS(){
       select option{background:${C.high};}
     `}</style>
     <div style={{fontFamily:"'Plus Jakarta Sans',-apple-system,sans-serif",background:C.bg,color:C.text,minHeight:'100vh',display:'flex',fontSize:'14px'}}>
-      <Sidebar/>
+      {Sidebar()}
       <div style={{flex:1,padding:'36px 44px',overflowY:'auto',maxHeight:'100vh'}}>
-        {views[view]||<VDashboard/>}
+        {ActiveView()}
       </div>
     </div>
   </>);
