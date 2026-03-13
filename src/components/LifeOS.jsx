@@ -69,6 +69,8 @@ const iJournal=[
   {id:iD(20),date:daysAgo(1),title:'',content:'Good day. Finished LeetCode after 45 mins of being stuck. Stretching helped with the back pain.'},
   {id:iD(21),date:daysAgo(2),title:'Clarity',content:'Started tracking water properly. Hit 3.2L. Feeling more focused. Diet still off.'},
 ];
+const iSleep=[]; // { id, date, start, end, durationHours }
+const iCracker=[]; // { id, date, content, act, urge, note }
 const iWeight=[
   {id:iD(22),date:daysAgo(0),weight:78.5,note:'Morning'},{id:iD(23),date:daysAgo(2),weight:78.8,note:''},
   {id:iD(24),date:daysAgo(4),weight:79.0,note:'After weekend'},{id:iD(25),date:daysAgo(7),weight:79.3,note:''},
@@ -221,6 +223,12 @@ export default function LifeOS(){
   const [waterGoal,setWaterGoal]=useState(3000);
   const [wCustom,setWCustom]=useState('');
   const [waterDate,setWaterDate]=useState(toDay());
+  const [sleepLogs,setSleepLogs]=useState(iSleep);
+  const [sleepDate,setSleepDate]=useState(shiftDate(toDay(),-1));
+  const [sleepForm,setSleepForm]=useState({start:'23:30',end:'07:00'});
+  const [crackerLogs,setCrackerLogs]=useState(iCracker);
+  const [crackerDate,setCrackerDate]=useState(toDay());
+  const [crackerForm,setCrackerForm]=useState({content:false,act:false,urge:false,note:''});
   const [vitamins,setVitamins]=useState(iVits);
   const [vitaminLogs,setVitaminLogs]=useState(iVitLogs);
   const [skinPhotos,setSkinPhotos]=useState({});
@@ -267,6 +275,8 @@ export default function LifeOS(){
   const setAllDates=(dateStr)=>{
     setSelectedDate(dateStr);
     setWaterDate(dateStr);
+    setSleepDate(dateStr);
+    setCrackerDate(dateStr);
     setJournalDate(dateStr);
     setWeightDate(dateStr);
     setStrengthDate(dateStr);
@@ -338,6 +348,48 @@ export default function LifeOS(){
     };
     loadData();
   }, []);
+
+  // Persist sleep logs locally so they survive reloads without needing a Supabase table
+  useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem('lifeos_sleep_logs');
+      if(raw){
+        const parsed=JSON.parse(raw);
+        if(Array.isArray(parsed)) setSleepLogs(parsed);
+      }
+    }catch(e){
+      console.error('Error loading sleep logs from localStorage:', e);
+    }
+  },[]);
+
+  useEffect(()=>{
+    try{
+      window.localStorage.setItem('lifeos_sleep_logs',JSON.stringify(sleepLogs));
+    }catch(e){
+      console.error('Error saving sleep logs to localStorage:', e);
+    }
+  },[sleepLogs]);
+
+  // Persist Cracker logs (adult-content & related behaviour) locally
+  useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem('lifeos_cracker_logs');
+      if(raw){
+        const parsed=JSON.parse(raw);
+        if(Array.isArray(parsed)) setCrackerLogs(parsed);
+      }
+    }catch(e){
+      console.error('Error loading Cracker logs from localStorage:', e);
+    }
+  },[]);
+
+  useEffect(()=>{
+    try{
+      window.localStorage.setItem('lifeos_cracker_logs',JSON.stringify(crackerLogs));
+    }catch(e){
+      console.error('Error saving Cracker logs to localStorage:', e);
+    }
+  },[crackerLogs]);
 
   // Upload skin photo to Supabase Storage
   const uploadSkin = async (file, date) => {
@@ -476,20 +528,51 @@ export default function LifeOS(){
   };
 
   const todayStr=toDay();
+  const lastNightStr=shiftDate(todayStr,-1);
+  const calcSleepDurationHours=(start,end)=>{
+    if(!start||!end) return 0;
+    const [sh,sm]=start.split(':').map(Number);
+    const [eh,em]=end.split(':').map(Number);
+    if(Number.isNaN(sh)||Number.isNaN(sm)||Number.isNaN(eh)||Number.isNaN(em)) return 0;
+    let startMin=sh*60+sm;
+    let endMin=eh*60+em;
+    if(endMin<=startMin) endMin+=24*60; // crosses midnight
+    const diff=endMin-startMin;
+    return diff/60;
+  };
   const todayWater=useMemo(()=>waterLogs.filter(l=>l.date===todayStr).reduce((s,l)=>s+l.amount,0),[waterLogs,todayStr]);
   const waterPct=Math.min(100,Math.round((todayWater/waterGoal)*100));
   const todayDSA=dsa.filter(p=>p.date===todayStr).length;
   const todayJournal=journal.some(e=>e.date===todayStr);
   const todayWorkout=perf.some(l=>l.date===todayStr);
+  const todaySleepHours=useMemo(()=>{
+    const entry=sleepLogs.find(l=>l.date===lastNightStr);
+    return entry?entry.durationHours:0;
+  },[sleepLogs,lastNightStr]);
+  const lastSlipDate=useMemo(()=>{
+    const slipDates=crackerLogs.filter(l=>l.content||l.act).map(l=>l.date);
+    if(!slipDates.length) return null;
+    return slipDates.slice().sort().slice(-1)[0];
+  },[crackerLogs]);
+  const daysSinceSlip=useMemo(()=>{
+    if(!lastSlipDate) return null;
+    const today=new Date(todayStr+'T00:00');
+    const last=new Date(lastSlipDate+'T00:00');
+    return Math.max(0,Math.floor((today-last)/86400000));
+  },[lastSlipDate,todayStr]);
   const dsaStreak=useMemo(()=>calcStreak([...new Set(dsa.map(p=>p.date))]),[dsa]);
   const workoutStreak=useMemo(()=>calcStreak([...new Set(perf.map(l=>l.date))]),[perf]);
   const journalStreak=useMemo(()=>calcStreak(journal.map(e=>e.date)),[journal]);
   const waterStreak=useMemo(()=>{const t=waterLogs.reduce((a,l)=>{a[l.date]=(a[l.date]||0)+l.amount;return a},{});return calcStreak(Object.entries(t).filter(([,v])=>v>=waterGoal).map(([d])=>d));},[waterLogs,waterGoal]);
-  const streaks=[{l:'DSA',v:dsaStreak,c:C.acc},{l:'Strength',v:workoutStreak,c:C.suc},{l:'Journal',v:journalStreak,c:C.war},{l:'Water',v:waterStreak,c:C.blue}];
+  const sleepStreak=useMemo(()=>{
+    const goodDates=sleepLogs.filter(l=>l.durationHours>=7.5).map(l=>l.date);
+    return calcStreak([...new Set(goodDates)]);
+  },[sleepLogs]);
+  const streaks=[{l:'DSA',v:dsaStreak,c:C.acc},{l:'Strength',v:workoutStreak,c:C.suc},{l:'Journal',v:journalStreak,c:C.war},{l:'Water',v:waterStreak,c:C.blue},{l:'Sleep',v:sleepStreak,c:C.pink}];
 
   const go=(v)=>{
     setView(v);
-    if(['water','weight','vitamin','skin'].includes(v)) setWellnessOpen(true);
+    if(['water','weight','sleep','cracker','vitamin','skin'].includes(v)) setWellnessOpen(true);
     if(['dsa','fundamentals','systemdesign','misc','interview','companies'].includes(v)) setLpaOpen(true);
   };
   const addWater=async(a,dateOverride)=>{
@@ -686,6 +769,8 @@ export default function LifeOS(){
       {wellnessOpen&&<div style={{marginLeft:'8px',borderLeft:`1px solid ${C.bord}`,paddingLeft:'8px',marginBottom:'4px'}}>
         <NavItem label='Water' active={view==='water'} onClick={()=>go('water')} dot={waterPct>=100} sub/>
         <NavItem label='Weight' active={view==='weight'} onClick={()=>go('weight')} dot={weight.some(w=>w.date===todayStr)} sub/>
+        <NavItem label='Sleep' active={view==='sleep'} onClick={()=>go('sleep')} dot={sleepLogs.some(l=>l.date===lastNightStr)} sub/>
+        <NavItem label='Cracker' active={view==='cracker'} onClick={()=>go('cracker')} dot={!!daysSinceSlip && daysSinceSlip>0} sub/>
         <NavItem label='Vitamins' active={view==='vitamin'} onClick={()=>go('vitamin')} sub/>
         <NavItem label='Skin' active={view==='skin'} onClick={()=>go('skin')} dot={!!skinPhotos[todayStr]} sub/>
       </div>}
@@ -721,10 +806,16 @@ export default function LifeOS(){
     const greet=h<12?'Good morning.':h<17?'Good afternoon.':'Good evening.';
     const today=[
       {label:'Water',done:waterPct>=100,value:`${waterPct}% · ${todayWater}ml`,nav:'water'},
+      {label:'Sleep',done:todaySleepHours>0,value:todaySleepHours?`${todaySleepHours.toFixed(1)}h last night`:'Not logged',nav:'sleep'},
       {label:'DSA',done:todayDSA>0,value:`${todayDSA} solved today`,nav:'dsa'},
       {label:'Journal',done:todayJournal,value:todayJournal?'Written':'Not written',nav:'journal'},
       {label:'Strength',done:todayWorkout,value:todayWorkout?'Logged':'Not logged',nav:'strength'},
     ];
+    const interviewsToday=interviews.filter(i=>i.date===todayStr).length;
+    const offers=companies.filter(c=>c.status==='Offer').length;
+    const applied=companies.filter(c=>c.status==='Applied' || c.status==='OA' || c.status==='Interview').length;
+    const dsaTodayLabel=todayDSA===0?'None yet':todayDSA===1?'1 problem':'${todayDSA} problems';
+    const journalTodayLabel=todayJournal?'Written':'Not yet';
     return(<div>
       <div style={{marginBottom:'32px'}}>
         <div style={{color:C.mut,fontSize:'11px',fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:'4px'}}>{new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</div>
@@ -751,11 +842,45 @@ export default function LifeOS(){
           </Card>)}
         </div>
       </div>
-      <div>
+      <div style={{marginBottom:'24px'}}>
+        <SLabel>Career snapshot</SLabel>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px'}}>
+          <Card style={{padding:'14px'}}>
+            <div style={{fontSize:'12px',color:C.mut,marginBottom:'4px'}}>Interviews today</div>
+            <div style={{fontSize:'24px',fontWeight:800,fontFamily:"'JetBrains Mono',monospace"}}>{interviewsToday}</div>
+          </Card>
+          <Card style={{padding:'14px'}}>
+            <div style={{fontSize:'12px',color:C.mut,marginBottom:'4px'}}>Active pipelines</div>
+            <div style={{fontSize:'24px',fontWeight:800,fontFamily:"'JetBrains Mono',monospace"}}>{applied}</div>
+          </Card>
+          <Card style={{padding:'14px'}}>
+            <div style={{fontSize:'12px',color:C.mut,marginBottom:'4px'}}>Offers</div>
+            <div style={{fontSize:'24px',fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:offers>0?C.suc:C.text}}>{offers}</div>
+          </Card>
+        </div>
+      </div>
+      <div style={{marginBottom:'24px'}}>
+        <SLabel>Study focus</SLabel>
+        <Card style={{padding:'14px',display:'grid',gridTemplateColumns:'1.2fr 1.2fr 1fr',gap:'10px',alignItems:'center'}}>
+          <div>
+            <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>DSA today</div>
+            <div style={{fontSize:'13px',fontWeight:600}}>{dsaTodayLabel}</div>
+          </div>
+          <div>
+            <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Journal</div>
+            <div style={{fontSize:'13px',fontWeight:600}}>{journalTodayLabel}</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <Btn size='sm' variant='ghost' onClick={()=>go('dsa')}>Go to prep →</Btn>
+          </div>
+        </Card>
+      </div>
+      <div style={{marginBottom:'4px'}}>
         <SLabel>Quick Add</SLabel>
         <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
           <Btn onClick={()=>addWater(300)} variant='accent'>+ 300ml</Btn>
           <Btn onClick={()=>addWater(500)} variant='accent'>+ 500ml</Btn>
+          <Btn onClick={()=>go('sleep')} variant='ghost'>+ Sleep</Btn>
           <Btn onClick={()=>{go('journal');setJEditing(true);}} variant='ghost'>+ Journal</Btn>
           <Btn onClick={()=>go('dsa')} variant='ghost'>+ DSA</Btn>
           <Btn onClick={()=>go('strength')} variant='ghost'>+ Workout</Btn>
@@ -846,6 +971,282 @@ export default function LifeOS(){
             <SLabel>Daily goal</SLabel>
             <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'6px'}}>
               {[2000,2500,3000,3500].map(g=><button key={g} onClick={()=>setWaterGoal(g)} style={{background:waterGoal===g?C.acc:C.high,border:`1px solid ${waterGoal===g?C.acc:C.bord}`,borderRadius:'6px',color:waterGoal===g?'#fff':C.mut,fontFamily:'inherit',fontSize:'11px',fontWeight:700,padding:'8px 4px',cursor:'pointer',transition:'all 0.15s'}}>{g/1000}L</button>)}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>);
+  };
+
+  const VSleep=()=>{
+    const activeDate=sleepDate||lastNightStr;
+    const existingForDate=sleepLogs.find(l=>l.date===activeDate);
+    const formDuration=sleepForm.start&&sleepForm.end?calcSleepDurationHours(sleepForm.start,sleepForm.end):0;
+    const displayDuration=existingForDate?existingForDate.durationHours:formDuration;
+    const target=8;
+    const badgeText=displayDuration?`${displayDuration.toFixed(1)}h · target ${target}h`:'Not logged';
+    const badgeColor=displayDuration>=target? 'suc' : 'acc';
+    const recent=[...sleepLogs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,14);
+    return(<div>
+      <PH title='Sleep' right={<Badge color={badgeColor}>{badgeText}</Badge>}/>
+      <div style={{display:'grid',gridTemplateColumns:'1.1fr 0.9fr',gap:'20px'}}>
+        <div>
+          <Card style={{marginBottom:'12px'}}>
+            <SLabel>Log sleep</SLabel>
+            <div style={{display:'grid',gap:'10px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
+                <div>
+                  <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Night of</div>
+                  <Input type='date' value={sleepDate} onChange={v=>setSleepDate(v)} style={{fontSize:'13px'}}/>
+                </div>
+                <div>
+                  <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Duration (auto)</div>
+                  <div style={{fontWeight:700,fontSize:'20px',fontFamily:"'JetBrains Mono',monospace"}}>
+                    {displayDuration?displayDuration.toFixed(2):'—'} <span style={{color:C.mut,fontSize:'12px'}}>h</span>
+                  </div>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
+                <div>
+                  <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Sleep time</div>
+                  <Input type='time' value={sleepForm.start} onChange={v=>setSleepForm(f=>({...f,start:v}))}/>
+                  <div style={{color:C.mut,fontSize:'11px',marginTop:'2px'}}>Usually when you go to bed (e.g. 23:30)</div>
+                </div>
+                <div>
+                  <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Wake time</div>
+                  <Input type='time' value={sleepForm.end} onChange={v=>setSleepForm(f=>({...f,end:v}))}/>
+                  <div style={{color:C.mut,fontSize:'11px',marginTop:'2px'}}>If earlier than sleep time, counts as next day</div>
+                </div>
+              </div>
+              <Btn
+                onClick={()=>{
+                  if(!sleepForm.start||!sleepForm.end) return;
+                  const dur=calcSleepDurationHours(sleepForm.start,sleepForm.end);
+                  if(!dur) return;
+                  const d=sleepDate||lastNightStr;
+                  const next={id:iD(1000),date:d,start:sleepForm.start,end:sleepForm.end,durationHours:dur};
+                  setSleepLogs(p=>{
+                    const filtered=p.filter(l=>l.date!==d);
+                    return[...filtered,next];
+                  });
+                }}
+                disabled={!sleepForm.start||!sleepForm.end}
+                full
+              >
+                Save sleep
+              </Btn>
+              {existingForDate&&<div style={{color:C.mut,fontSize:'11px',marginTop:'2px'}}>Overwrites previous entry for this night.</div>}
+            </div>
+          </Card>
+        </div>
+        <div>
+          <Card style={{marginBottom:'12px'}}>
+            <SLabel>Last 14 nights</SLabel>
+            {recent.length===0?<div style={{color:C.mut,textAlign:'center',padding:'16px 0'}}>No sleep logged yet</div>:<>
+              <div style={{display:'flex',gap:'4px',marginBottom:'8px',alignItems:'flex-end'}}>
+                {recent.map(l=>{
+                  const pct=Math.min(100,Math.round((l.durationHours/target)*100));
+                  return(
+                    <div key={l.id} style={{flex:1,minWidth:'10px',textAlign:'center'}}>
+                      <div style={{height:'80px',display:'flex',alignItems:'flex-end',justifyContent:'center',marginBottom:'4px'}}>
+                        <div style={{width:'10px',borderRadius:'999px',background:C.high,overflow:'hidden'}}>
+                          <div style={{width:'100%',height:`${pct}%`,background:l.durationHours>=target?C.suc:C.acc}}/>
+                        </div>
+                      </div>
+                      <div style={{fontSize:'9px',color:C.mut}}>{fmt(l.date).split(' ')[1]}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{fontSize:'11px',color:C.mut}}>Bar height vs {target}h target. Green = met or exceeded.</div>
+            </>}
+          </Card>
+          <Card>
+            <SLabel>How it works</SLabel>
+            <div style={{color:C.mut,fontSize:'12px',lineHeight:1.7}}>
+              Enter when you went to bed and when you woke up. If wake time is earlier than sleep time, it is treated as the next morning so overnight sleep is handled automatically.
+              Sleep streak on the sidebar counts nights with at least 7.5h.
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>);
+  };
+
+  const VCracker=()=>{
+    const activeDate=crackerDate||todayStr;
+    const entryForDate=crackerLogs.find(l=>l.date===activeDate);
+    const slipToday=entryForDate && (entryForDate.content||entryForDate.act);
+    const urgeToday=entryForDate && entryForDate.urge;
+    const slipDates=[...new Set(crackerLogs.filter(l=>l.content||l.act).map(l=>l.date))];
+    const cleanSince=typeof daysSinceSlip==='number'?`${daysSinceSlip} day${daysSinceSlip===1?'':'s'} clean`:'No slips logged yet';
+    const badgeColor=!lastSlipDate?'suc':daysSinceSlip>=7?'suc':daysSinceSlip>=1?'acc':'dan';
+    const badgeText=!lastSlipDate?'Starting fresh':daysSinceSlip===0?'Slipped today':cleanSince;
+    const recent=[...crackerLogs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
+    const toggleField=(field)=>{
+      setCrackerForm(f=>({...f,[field]:!f[field]}));
+    };
+    const saveEntry=()=>{
+      const hasData=crackerForm.content||crackerForm.act||crackerForm.urge||crackerForm.note.trim();
+      const d=activeDate;
+      if(!hasData){
+        // If empty and existing entry, delete it to avoid noise
+        if(entryForDate){
+          setCrackerLogs(p=>p.filter(l=>l.date!==d));
+        }
+        return;
+      }
+      const next={id:iD(2000),date:d,content:crackerForm.content,act:crackerForm.act,urge:crackerForm.urge,note:crackerForm.note.trim()};
+      setCrackerLogs(p=>{
+        const filtered=p.filter(l=>l.date!==d);
+        return[...filtered,next];
+      });
+    };
+    return(<div>
+      <PH title='Cracker' right={<Badge color={badgeColor}>{badgeText}</Badge>}/>
+      <div style={{marginBottom:'16px'}}>
+        <SLabel>Clean streak</SLabel>
+        <Card style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'16px',padding:'16px 18px'}}>
+          <div>
+            <div style={{fontSize:'12px',color:C.mut,marginBottom:'4px'}}>Days since last slip</div>
+            <div style={{fontSize:'32px',fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:badgeColor==='suc'?C.suc:badgeColor==='acc'?C.acc:C.dan}}>
+              {typeof daysSinceSlip==='number' ? daysSinceSlip : '—'}
+            </div>
+          </div>
+          <div style={{textAlign:'right',maxWidth:'260px',fontSize:'12px',color:C.mut,lineHeight:1.6}}>
+            When you go a full day without watching anything or acting on it, tomorrow this number increases.
+            Each quiet day is a win—this card is here to make that visible.
+          </div>
+        </Card>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1.1fr 0.9fr',gap:'20px'}}>
+        <div>
+          <Card style={{marginBottom:'12px'}}>
+            <SLabel>Today\'s check-in</SLabel>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px'}}>
+              <div>
+                <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Date</div>
+                <Input type='date' value={crackerDate} onChange={v=>setCrackerDate(v)}/>
+              </div>
+              <div>
+                <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Status</div>
+                <div style={{fontSize:'13px',fontWeight:600}}>
+                  {slipToday?'Slip logged':urgeToday?'Urge resisted':'Not logged'}
+                </div>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'10px'}}>
+              <button
+                type='button'
+                onClick={()=>toggleField('content')}
+                style={{
+                  padding:'10px 8px',
+                  borderRadius:'8px',
+                  border:`1px solid ${crackerForm.content?C.dan:C.bord}`,
+                  background:crackerForm.content?C.danBg:C.high,
+                  color:crackerForm.content?C.dan:C.mut,
+                  fontSize:'11px',
+                  fontWeight:600,
+                  cursor:'pointer'
+                }}
+              >
+                Watched adult content
+              </button>
+              <button
+                type='button'
+                onClick={()=>toggleField('act')}
+                style={{
+                  padding:'10px 8px',
+                  borderRadius:'8px',
+                  border:`1px solid ${crackerForm.act?C.dan:C.bord}`,
+                  background:crackerForm.act?C.danBg:C.high,
+                  color:crackerForm.act?C.dan:C.mut,
+                  fontSize:'11px',
+                  fontWeight:600,
+                  cursor:'pointer'
+                }}
+              >
+                Acted on it
+              </button>
+              <button
+                type='button'
+                onClick={()=>toggleField('urge')}
+                style={{
+                  padding:'10px 8px',
+                  borderRadius:'8px',
+                  border:`1px solid ${crackerForm.urge?C.suc:C.bord}`,
+                  background:crackerForm.urge?C.sucBg:C.high,
+                  color:crackerForm.urge?C.suc:C.mut,
+                  fontSize:'11px',
+                  fontWeight:600,
+                  cursor:'pointer'
+                }}
+              >
+                Urge noticed & resisted
+              </button>
+            </div>
+            <Textarea
+              value={crackerForm.note}
+              onChange={v=>setCrackerForm(f=>({...f,note:v}))}
+              placeholder='Notes (what triggered it, where you were, what helped, what you can change next time)...'
+              rows={4}
+            />
+            <div style={{display:'flex',gap:'8px',marginTop:'10px'}}>
+              <Btn onClick={saveEntry} full>Save</Btn>
+              {entryForDate&&(
+                <Btn
+                  variant='ghost'
+                  onClick={()=>{
+                    setCrackerForm({content:false,act:false,urge:false,note:''});
+                    setCrackerLogs(p=>p.filter(l=>l.date!==activeDate));
+                  }}
+                >
+                  Clear day
+                </Btn>
+              )}
+            </div>
+          </Card>
+          <Card>
+            <SLabel>Recent days</SLabel>
+            {recent.length===0?<div style={{color:C.mut,textAlign:'center',padding:'16px 0'}}>No history yet. Start with today.</div>:recent.map(l=>{
+              const label=fmt(l.date);
+              const tags=[];
+              if(l.content) tags.push('content');
+              if(l.act) tags.push('acted');
+              if(l.urge) tags.push('urge resisted');
+              const isClean=!l.content && !l.act && l.urge;
+              return(
+                <div key={l.id} style={{padding:'8px 0',borderBottom:`1px solid ${C.bord}`,display:'flex',justifyContent:'space-between',gap:'10px'}}>
+                  <div>
+                    <div style={{fontSize:'13px',fontWeight:600}}>{label}</div>
+                    <div style={{fontSize:'11px',color:isClean?C.suc:C.mut,marginTop:'2px'}}>
+                      {tags.length?tags.join(' · '):'No data'}
+                    </div>
+                    {l.note&&<div style={{fontSize:'11px',color:C.mut,marginTop:'4px'}}>{l.note}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+        </div>
+        <div>
+          <Card style={{marginBottom:'12px'}}>
+            <SLabel>Calendar</SLabel>
+            <Cal
+              activeDates={slipDates}
+              selectedDate={selectedDate}
+              onSelect={setAllDates}
+              calDate={calDate}
+              setCalDate={setCalDate}
+              todayStr={todayStr}
+              dotColor={C.dan}
+            />
+          </Card>
+          <Card>
+            <SLabel>Guidelines</SLabel>
+            <div style={{color:C.mut,fontSize:'12px',lineHeight:1.7}}>
+              The goal here is simple: no adult content. Use this page to honestly track exposure, actions, and when you successfully ride out an urge.
+              Over time you\'ll see patterns in triggers and build longer clean stretches.
             </div>
           </Card>
         </div>
@@ -1014,8 +1415,8 @@ export default function LifeOS(){
               const expected = matchesFrequency(v.frequency, d);
               const baseBorder = expected ? `1px solid ${C.bord}` : `1px dashed ${C.bord}`;
               const baseOpacity = expected ? 1 : 0.35;
-              const bg = taken ? C.acc : 'transparent';
-              const color = taken ? '#fff' : C.mut;
+              const bg = taken ? C.accBg : 'transparent';
+              const color = taken ? C.acc : C.mut;
               const cellOpacity = taken ? 1 : baseOpacity;
               return<td
                 key={d}
@@ -1876,6 +2277,8 @@ export default function LifeOS(){
     dashboard: VDashboard,
     water: VWater,
     weight: VWeight,
+    sleep: VSleep,
+    cracker: VCracker,
     vitamin: VVitamin,
     skin: VSkin,
     strength: VStrength,
