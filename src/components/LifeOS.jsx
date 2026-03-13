@@ -259,6 +259,10 @@ export default function LifeOS(){
   const [editingVitamin,setEditingVitamin]=useState(null);
   const [expandedTopic,setExpandedTopic]=useState(null);
   const [vitWeekAnchor,setVitWeekAnchor]=useState(toDay());
+  const [htmlNotes,setHtmlNotes]=useState([]); // { id, section, name, storage_path, created_at }
+  const [htmlNoteForm,setHtmlNoteForm]=useState({ section:'fundamentals', name:'', file:null });
+  const [htmlNoteModal,setHtmlNoteModal]=useState(null); // note row
+  const [htmlNoteHtml,setHtmlNoteHtml]=useState(''); // fetched html
 
   const setAllDates=(dateStr)=>{
     setSelectedDate(dateStr);
@@ -285,7 +289,8 @@ export default function LifeOS(){
           interviewsRes,
           skinPhotosRes,
           skinRoutineItemsRes,
-          skinRoutineLogsRes
+          skinRoutineLogsRes,
+          htmlNotesRes
         ] = await Promise.all([
           supabase.from('water_logs').select('*').order('created_at', { ascending: true }),
           supabase.from('vitamins').select('*').order('created_at', { ascending: true }),
@@ -299,7 +304,8 @@ export default function LifeOS(){
           supabase.from('interviews').select('*').order('date', { ascending: false }),
           supabase.from('skin_photos').select('*'),
           supabase.from('skin_routine_items').select('*').order('created_at', { ascending: true }),
-          supabase.from('skin_routine_logs').select('*')
+          supabase.from('skin_routine_logs').select('*'),
+          supabase.from('html_notes').select('*').order('created_at', { ascending: true })
         ]);
 
         if (waterRes.data) setWaterLogs(waterRes.data);
@@ -325,6 +331,7 @@ export default function LifeOS(){
 
         if (skinRoutineItemsRes?.data) setSkinRoutineItems(skinRoutineItemsRes.data);
         if (skinRoutineLogsRes?.data) setSkinRoutineLogs(skinRoutineLogsRes.data);
+        if (htmlNotesRes?.data) setHtmlNotes(htmlNotesRes.data);
       } catch (error) {
         console.error('Error loading data:', error);
       }
@@ -409,6 +416,62 @@ export default function LifeOS(){
       }
     }catch(e){
       console.error('Error toggling routine log:', e);
+    }
+  };
+
+  const addHtmlNote = async () => {
+    if(!htmlNoteForm.name.trim() || !htmlNoteForm.file) return;
+    try{
+      const safeName = htmlNoteForm.name.trim().replace(/[^a-z0-9-_ ]/gi,'').replace(/\s+/g,'-').toLowerCase() || 'note';
+      const ext = (htmlNoteForm.file.name.split('.').pop() || 'html').toLowerCase();
+      const filename = `${safeName}-${Date.now()}.${ext==='htm'?'html':ext}`;
+      const storagePath = `${htmlNoteForm.section}/${filename}`;
+
+      const { error: upErr } = await supabase.storage
+        .from('html-notes')
+        .upload(storagePath, htmlNoteForm.file, { upsert: true, contentType: 'text/html' });
+      if(upErr) throw upErr;
+
+      const { data, error } = await supabase
+        .from('html_notes')
+        .insert({ section: htmlNoteForm.section, name: htmlNoteForm.name.trim(), storage_path: storagePath })
+        .select()
+        .single();
+      if(error) throw error;
+      if(data) setHtmlNotes(p=>[...p,data]);
+      setHtmlNoteForm({ section: htmlNoteForm.section, name:'', file:null });
+    }catch(e){
+      console.error('Error adding html note:', e);
+    }
+  };
+
+  const deleteHtmlNote = async (note) => {
+    try{
+      await supabase.from('html_notes').delete().eq('id', note.id);
+      if(note.storage_path){
+        await supabase.storage.from('html-notes').remove([note.storage_path]);
+      }
+      setHtmlNotes(p=>p.filter(n=>n.id!==note.id));
+      if(htmlNoteModal?.id===note.id){
+        setHtmlNoteModal(null);
+        setHtmlNoteHtml('');
+      }
+    }catch(e){
+      console.error('Error deleting html note:', e);
+    }
+  };
+
+  const openHtmlNote = async (note) => {
+    try{
+      setHtmlNoteModal(note);
+      setHtmlNoteHtml('Loading…');
+      const { data, error } = await supabase.storage.from('html-notes').download(note.storage_path);
+      if(error) throw error;
+      const text = await data.text();
+      setHtmlNoteHtml(text);
+    }catch(e){
+      console.error('Error opening html note:', e);
+      setHtmlNoteHtml('Failed to load note.');
     }
   };
 
@@ -1336,40 +1399,195 @@ export default function LifeOS(){
     </div>);
   };
 
-  const VNotes=({data,title})=>(
-    <div>
-      <PH title={title}/>
-      <div style={{display:'grid',gap:'10px'}}>
-        {Object.entries(data).map(([subject,topics])=><Card key={subject} style={{padding:'0',overflow:'hidden'}}>
-          <div style={{padding:'14px 18px',background:C.high,borderBottom:`1px solid ${C.bord}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div style={{fontWeight:700,fontSize:'14px'}}>{subject}</div>
-            <Badge color='mut'>{topics.length}</Badge>
+  const VFundamentals=()=>{
+    const section='fundamentals';
+    const notes = htmlNotes.filter(n=>n.section===section).slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+    const isActiveSection = htmlNoteForm.section===section;
+    const fileLabel = isActiveSection && htmlNoteForm.file ? htmlNoteForm.file.name : 'Choose HTML file';
+    return (
+      <div>
+        <PH title='Fundamentals' />
+
+        <Card style={{marginBottom:'14px'}}>
+          <SLabel>Add note</SLabel>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(0,2fr) minmax(0,1.4fr)',gap:'10px',alignItems:'stretch'}}>
+            <Input
+              value={isActiveSection ? htmlNoteForm.name : ''}
+              onChange={v=>setHtmlNoteForm({ section, name:v, file:isActiveSection?htmlNoteForm.file:null })}
+              placeholder='Note name (e.g. TCP Notes)'
+            />
+            <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+              <label
+                style={{
+                  display:'inline-flex',
+                  alignItems:'center',
+                  justifyContent:'space-between',
+                  gap:'8px',
+                  padding:'8px 12px',
+                  borderRadius:'8px',
+                  border:`1px dashed ${C.bord}`,
+                  background:C.high,
+                  color:C.mut,
+                  fontSize:'12px',
+                  cursor:'pointer'
+                }}
+              >
+                <span style={{whiteSpace:'nowrap'}}>Upload HTML</span>
+                <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:isActiveSection && htmlNoteForm.file?C.text:C.mut}}>
+                  {fileLabel}
+                </span>
+                <input
+                  type='file'
+                  accept='.html,.htm,text/html'
+                  style={{display:'none'}}
+                  onChange={(e)=>{
+                    const file = e.target.files?.[0] || null;
+                    setHtmlNoteForm({ section, name:isActiveSection?htmlNoteForm.name:'', file });
+                  }}
+                />
+              </label>
+              <span style={{color:C.mut,fontSize:'11px'}}>Your own HTML notes will render inside the app.</span>
+            </div>
           </div>
-          <div style={{padding:'4px 0'}}>
-            {topics.map((topic,i)=><div key={topic.id}>
-              <div onClick={()=>setExpandedTopic(expandedTopic===topic.id?null:topic.id)} style={{padding:'12px 18px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:i>0?`1px solid ${C.bord}`:'none'}}>
-                <span style={{fontWeight:600,fontSize:'13px'}}>{topic.title}</span>
-                <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-                  <span style={{color:C.mut,fontSize:'10px',fontFamily:"'JetBrains Mono',monospace"}}>{topic.file}</span>
-                  <span style={{color:C.mut,fontSize:'11px'}}>{expandedTopic===topic.id?'▲':'▼'}</span>
+          <div style={{marginTop:'10px',display:'flex',gap:'8px',justifyContent:'flex-start'}}>
+            <Btn
+              onClick={addHtmlNote}
+              disabled={!(isActiveSection && htmlNoteForm.name.trim() && htmlNoteForm.file)}
+            >
+              Upload
+            </Btn>
+            <Btn onClick={()=>setHtmlNoteForm({ section, name:'', file:null })} variant='ghost'>Clear</Btn>
+          </div>
+        </Card>
+
+        <div style={{display:'grid',gap:'10px'}}>
+          {notes.map(n=>(
+            <Card key={n.id} style={{padding:'14px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'10px'}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:'14px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.name}</div>
+                  <div style={{color:C.mut,fontSize:'11px',marginTop:'2px',fontFamily:"'JetBrains Mono',monospace"}}>{n.storage_path}</div>
+                </div>
+                <div style={{display:'flex',gap:'8px',flexShrink:0}}>
+                  <Btn size='sm' variant='ghost' onClick={()=>openHtmlNote(n)}>Open</Btn>
+                  <Btn size='sm' variant='danger' onClick={()=>{ if(window.confirm('Delete this note?')) deleteHtmlNote(n); }}>Delete</Btn>
                 </div>
               </div>
-              {expandedTopic===topic.id&&<div style={{padding:'0 18px 16px',background:C.bg}}>
-                <div style={{color:C.mut,fontSize:'13px',lineHeight:1.7,marginBottom:'12px'}}>{topic.notes}</div>
-                <div style={{background:C.high,border:`2px dashed ${C.bord}`,borderRadius:'8px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'12px'}}>
-                  <div style={{fontSize:'20px'}}>📄</div>
-                  <div>
-                    <div style={{fontWeight:600,fontSize:'12px',color:C.text,marginBottom:'2px'}}>{topic.file}</div>
-                    <div style={{color:C.mut,fontSize:'11px'}}>Place this HTML file in your project — it will render here once connected</div>
-                  </div>
-                </div>
-              </div>}
-            </div>)}
-          </div>
-        </Card>)}
+            </Card>
+          ))}
+          {notes.length===0 && <div style={{color:C.mut,textAlign:'center',padding:'50px'}}>No notes yet. Upload an HTML file above.</div>}
+        </div>
+
+        {htmlNoteModal && (
+          <Modal title={htmlNoteModal.name} onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}>
+            <div style={{border:`1px solid ${C.bord}`,borderRadius:'10px',overflow:'hidden',background:C.bg}}>
+              <iframe
+                title={htmlNoteModal.name}
+                sandbox="allow-same-origin"
+                srcDoc={htmlNoteHtml || ''}
+                style={{width:'100%',height:'70vh',border:'none',background:'#fff'}}
+              />
+            </div>
+          </Modal>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
+
+  const VMisc=()=>{
+    const section='misc';
+    const notes = htmlNotes.filter(n=>n.section===section).slice().sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+    const isActiveSection = htmlNoteForm.section===section;
+    const fileLabel = isActiveSection && htmlNoteForm.file ? htmlNoteForm.file.name : 'Choose HTML file';
+    return (
+      <div>
+        <PH title='Miscellaneous' />
+
+        <Card style={{marginBottom:'14px'}}>
+          <SLabel>Add note</SLabel>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(0,2fr) minmax(0,1.4fr)',gap:'10px',alignItems:'stretch'}}>
+            <Input
+              value={isActiveSection ? htmlNoteForm.name : ''}
+              onChange={v=>setHtmlNoteForm({ section, name:v, file:isActiveSection?htmlNoteForm.file:null })}
+              placeholder='Note name (e.g. Git Internals)'
+            />
+            <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+              <label
+                style={{
+                  display:'inline-flex',
+                  alignItems:'center',
+                  justifyContent:'space-between',
+                  gap:'8px',
+                  padding:'8px 12px',
+                  borderRadius:'8px',
+                  border:`1px dashed ${C.bord}`,
+                  background:C.high,
+                  color:C.mut,
+                  fontSize:'12px',
+                  cursor:'pointer'
+                }}
+              >
+                <span style={{whiteSpace:'nowrap'}}>Upload HTML</span>
+                <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:isActiveSection && htmlNoteForm.file?C.text:C.mut}}>
+                  {fileLabel}
+                </span>
+                <input
+                  type='file'
+                  accept='.html,.htm,text/html'
+                  style={{display:'none'}}
+                  onChange={(e)=>{
+                    const file = e.target.files?.[0] || null;
+                    setHtmlNoteForm({ section, name:isActiveSection?htmlNoteForm.name:'', file });
+                  }}
+                />
+              </label>
+              <span style={{color:C.mut,fontSize:'11px'}}>Your own HTML notes will render inside the app.</span>
+            </div>
+          </div>
+          <div style={{marginTop:'10px',display:'flex',gap:'8px',justifyContent:'flex-start'}}>
+            <Btn
+              onClick={addHtmlNote}
+              disabled={!(isActiveSection && htmlNoteForm.name.trim() && htmlNoteForm.file)}
+            >
+              Upload
+            </Btn>
+            <Btn onClick={()=>setHtmlNoteForm({ section, name:'', file:null })} variant='ghost'>Clear</Btn>
+          </div>
+        </Card>
+
+        <div style={{display:'grid',gap:'10px'}}>
+          {notes.map(n=>(
+            <Card key={n.id} style={{padding:'14px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'10px'}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:'14px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.name}</div>
+                  <div style={{color:C.mut,fontSize:'11px',marginTop:'2px',fontFamily:"'JetBrains Mono',monospace"}}>{n.storage_path}</div>
+                </div>
+                <div style={{display:'flex',gap:'8px',flexShrink:0}}>
+                  <Btn size='sm' variant='ghost' onClick={()=>openHtmlNote(n)}>Open</Btn>
+                  <Btn size='sm' variant='danger' onClick={()=>{ if(window.confirm('Delete this note?')) deleteHtmlNote(n); }}>Delete</Btn>
+                </div>
+              </div>
+            </Card>
+          ))}
+          {notes.length===0 && <div style={{color:C.mut,textAlign:'center',padding:'50px'}}>No notes yet. Upload an HTML file above.</div>}
+        </div>
+
+        {htmlNoteModal && (
+          <Modal title={htmlNoteModal.name} onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}>
+            <div style={{border:`1px solid ${C.bord}`,borderRadius:'10px',overflow:'hidden',background:C.bg}}>
+              <iframe
+                title={htmlNoteModal.name}
+                sandbox="allow-same-origin"
+                srcDoc={htmlNoteHtml || ''}
+                style={{width:'100%',height:'70vh',border:'none',background:'#fff'}}
+              />
+            </div>
+          </Modal>
+        )}
+      </div>
+    );
+  };
 
   const VSystemDesign=()=>(
     <div>
@@ -1662,9 +1880,9 @@ export default function LifeOS(){
     skin: VSkin,
     strength: VStrength,
     dsa: VDSA,
-    fundamentals: () => <VNotes data={iFundamentals} title='Fundamentals'/>,
+    fundamentals: VFundamentals,
     systemdesign: VSystemDesign,
-    misc: () => <VNotes data={iMisc} title='Miscellaneous'/>,
+    misc: VMisc,
     interview: VInterview,
     companies: VCompanies,
     journal: VJournal,
