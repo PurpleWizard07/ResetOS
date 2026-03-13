@@ -241,6 +241,7 @@ export default function LifeOS(){
   const [expandedDsa,setExpandedDsa]=useState(null);
   const [perf,setPerf]=useState(iPerf);
   const [perfForm,setPerfForm]=useState({type:'Shadowboxing',notes:''});
+  const [strengthDate,setStrengthDate]=useState(toDay());
   const [weight,setWeight]=useState(iWeight);
   const [wForm,setWForm]=useState({weight:'',note:''});
   const [weightDate,setWeightDate]=useState(toDay());
@@ -264,6 +265,7 @@ export default function LifeOS(){
     setWaterDate(dateStr);
     setJournalDate(dateStr);
     setWeightDate(dateStr);
+    setStrengthDate(dateStr);
   };
 
   // Load data from Supabase on mount
@@ -456,10 +458,11 @@ export default function LifeOS(){
       setDsaForm({name:'',source:'LeetCode',link:'',tags:'',difficulty:'Medium',notes:''});
     }
   };
-  const addPerf=async()=>{
+  const addPerf=async(dateOverride)=>{
+    const targetDate = dateOverride || strengthDate || todayStr;
     const { data } = await supabase
       .from('strength_logs')
-      .insert({ date: todayStr, type: perfForm.type, notes: perfForm.notes })
+      .insert({ date: targetDate, type: perfForm.type, notes: perfForm.notes })
       .select()
       .single();
     if (data) {
@@ -1155,7 +1158,8 @@ export default function LifeOS(){
 
   const VStrength=()=>{
     const activeDates=[...new Set(perf.map(l=>l.date))];
-    const todayLogs=perf.filter(l=>l.date===todayStr);
+    const activeDate = strengthDate || todayStr;
+    const activeLogs=perf.filter(l=>l.date===activeDate);
     const selLogs=perf.filter(l=>l.date===selectedDate);
     return(<div>
       <PH title='Strength' right={<Badge color='suc'>{workoutStreak}d streak</Badge>}/>
@@ -1164,25 +1168,98 @@ export default function LifeOS(){
           <Card style={{marginBottom:'12px'}}>
             <SLabel>Log workout</SLabel>
             <div style={{display:'grid',gap:'8px'}}>
-              <Sel value={perfForm.type} onChange={v=>setPerfForm(f=>({...f,type:v}))} options={['Shadowboxing','Stretching','Exercise','Running','Cycling','Yoga','HIIT','Other']}/>
+              <Input type='date' value={strengthDate} onChange={v=>setStrengthDate(v)} />
+              <Input value={perfForm.type} onChange={v=>setPerfForm(f=>({...f,type:v}))} placeholder='Workout type (e.g. Pull day, Run, Yoga)'/>
               <Textarea value={perfForm.notes} onChange={v=>setPerfForm(f=>({...f,notes:v}))} placeholder='Sets, reps, rounds, duration...' rows={4}/>
-              <Btn onClick={addPerf} full>Log Workout</Btn>
+              <Btn onClick={()=>addPerf()} full disabled={!perfForm.type.trim()}>Log Workout</Btn>
             </div>
           </Card>
-          {todayLogs.length>0&&<Card><SLabel>Today</SLabel>
-            {todayLogs.map((l,i)=><div key={l.id} style={{padding:'10px 0',borderBottom:i<todayLogs.length-1?`1px solid ${C.bord}`:'none'}}>
-              <div style={{fontWeight:700,color:C.suc,fontSize:'13px',marginBottom:'4px'}}>{l.type}</div>
-              {l.notes&&<div style={{color:C.mut,fontSize:'12px',lineHeight:1.6,whiteSpace:'pre-wrap'}}>{l.notes}</div>}
-            </div>)}
-          </Card>}
+          <Card>
+            <SLabel>Logs for {activeDate===todayStr?'today':fmtLong(activeDate)}</SLabel>
+            {activeLogs.length===0
+              ? <div style={{color:C.mut,textAlign:'center',padding:'10px 0'}}>No logs</div>
+              : activeLogs.map((l,i)=><div key={l.id} style={{padding:'10px 0',borderBottom:i<activeLogs.length-1?`1px solid ${C.bord}`:'none'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'10px'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:700,color:C.suc,fontSize:'13px',marginBottom:'4px'}}>{l.type}</div>
+                      {l.notes&&<div style={{color:C.mut,fontSize:'12px',lineHeight:1.6,whiteSpace:'pre-wrap'}}>{l.notes}</div>}
+                    </div>
+                    <div style={{display:'flex',gap:'6px',flexShrink:0}}>
+                      <button
+                        onClick={async()=>{
+                          const nextType = window.prompt('Workout type', l.type || '');
+                          if(nextType===null) return;
+                          const nextNotes = window.prompt('Notes', l.notes || '');
+                          if(nextNotes===null) return;
+                          const { data } = await supabase
+                            .from('strength_logs')
+                            .update({ type: nextType, notes: nextNotes })
+                            .eq('id', l.id)
+                            .select()
+                            .single();
+                          if(data) setPerf(p=>p.map(x=>x.id===l.id?data:x));
+                        }}
+                        style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,cursor:'pointer',fontSize:'11px',padding:'2px 6px'}}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={async()=>{
+                          if(!window.confirm('Delete this workout log?')) return;
+                          await supabase.from('strength_logs').delete().eq('id', l.id);
+                          setPerf(p=>p.filter(x=>x.id!==l.id));
+                        }}
+                        style={{background:'transparent',border:'none',color:C.dan,cursor:'pointer',fontSize:'13px'}}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>)
+            }
+          </Card>
         </div>
         <div>
           <Cal activeDates={activeDates} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.suc}/>
           {selLogs.length>0&&selectedDate!==todayStr&&<Card style={{marginTop:'10px'}}>
             <SLabel>{fmtLong(selectedDate)}</SLabel>
             {selLogs.map((l,i)=><div key={l.id} style={{padding:'10px 0',borderBottom:i<selLogs.length-1?`1px solid ${C.bord}`:'none'}}>
-              <div style={{fontWeight:700,color:C.suc,fontSize:'13px',marginBottom:'4px'}}>{l.type}</div>
-              {l.notes&&<div style={{color:C.mut,fontSize:'12px',lineHeight:1.6}}>{l.notes}</div>}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'10px'}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,color:C.suc,fontSize:'13px',marginBottom:'4px'}}>{l.type}</div>
+                  {l.notes&&<div style={{color:C.mut,fontSize:'12px',lineHeight:1.6,whiteSpace:'pre-wrap'}}>{l.notes}</div>}
+                </div>
+                <div style={{display:'flex',gap:'6px',flexShrink:0}}>
+                  <button
+                    onClick={async()=>{
+                      const nextType = window.prompt('Workout type', l.type || '');
+                      if(nextType===null) return;
+                      const nextNotes = window.prompt('Notes', l.notes || '');
+                      if(nextNotes===null) return;
+                      const { data } = await supabase
+                        .from('strength_logs')
+                        .update({ type: nextType, notes: nextNotes })
+                        .eq('id', l.id)
+                        .select()
+                        .single();
+                      if(data) setPerf(p=>p.map(x=>x.id===l.id?data:x));
+                    }}
+                    style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,cursor:'pointer',fontSize:'11px',padding:'2px 6px'}}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={async()=>{
+                      if(!window.confirm('Delete this workout log?')) return;
+                      await supabase.from('strength_logs').delete().eq('id', l.id);
+                      setPerf(p=>p.filter(x=>x.id!==l.id));
+                    }}
+                    style={{background:'transparent',border:'none',color:C.dan,cursor:'pointer',fontSize:'13px'}}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
             </div>)}
           </Card>}
         </div>
