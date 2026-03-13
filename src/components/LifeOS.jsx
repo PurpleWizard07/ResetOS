@@ -224,6 +224,10 @@ export default function LifeOS(){
   const [vitamins,setVitamins]=useState(iVits);
   const [vitaminLogs,setVitaminLogs]=useState(iVitLogs);
   const [skinPhotos,setSkinPhotos]=useState({});
+  const [skinRoutineItems,setSkinRoutineItems]=useState([]); // { id, name, routine }
+  const [skinRoutineLogs,setSkinRoutineLogs]=useState([]); // { id, item_id, date }
+  const [skinRoutineForm,setSkinRoutineForm]=useState({ routine:'morning', name:'' });
+  const [skinRoutineWeekAnchor,setSkinRoutineWeekAnchor]=useState(toDay());
   const [skinCompareMode,setSkinCompareMode]=useState(false);
   const [skinCmpA,setSkinCmpA]=useState('');
   const [skinCmpB,setSkinCmpB]=useState('');
@@ -277,7 +281,9 @@ export default function LifeOS(){
           companiesRes,
           systemDesignRes,
           interviewsRes,
-          skinPhotosRes
+          skinPhotosRes,
+          skinRoutineItemsRes,
+          skinRoutineLogsRes
         ] = await Promise.all([
           supabase.from('water_logs').select('*').order('created_at', { ascending: true }),
           supabase.from('vitamins').select('*').order('created_at', { ascending: true }),
@@ -289,7 +295,9 @@ export default function LifeOS(){
           supabase.from('companies').select('*'),
           supabase.from('system_design').select('*'),
           supabase.from('interviews').select('*').order('date', { ascending: false }),
-          supabase.from('skin_photos').select('*')
+          supabase.from('skin_photos').select('*'),
+          supabase.from('skin_routine_items').select('*').order('created_at', { ascending: true }),
+          supabase.from('skin_routine_logs').select('*')
         ]);
 
         if (waterRes.data) setWaterLogs(waterRes.data);
@@ -312,6 +320,9 @@ export default function LifeOS(){
           }, {});
           setSkinPhotos(photoMap);
         }
+
+        if (skinRoutineItemsRes?.data) setSkinRoutineItems(skinRoutineItemsRes.data);
+        if (skinRoutineLogsRes?.data) setSkinRoutineLogs(skinRoutineLogsRes.data);
       } catch (error) {
         console.error('Error loading data:', error);
       }
@@ -349,6 +360,53 @@ export default function LifeOS(){
       }
     } catch (error) {
       console.error('Error uploading skin photo:', error);
+    }
+  };
+
+  const addSkinRoutineItem = async () => {
+    if(!skinRoutineForm.name.trim()) return;
+    try{
+      const payload = { routine: skinRoutineForm.routine, name: skinRoutineForm.name.trim() };
+      const { data, error } = await supabase
+        .from('skin_routine_items')
+        .insert(payload)
+        .select()
+        .single();
+      if(error) throw error;
+      if(data) setSkinRoutineItems(p=>[...p,data]);
+      setSkinRoutineForm(f=>({ ...f, name:'' }));
+    }catch(e){
+      console.error('Error adding routine item:', e);
+    }
+  };
+
+  const deleteSkinRoutineItem = async (item) => {
+    try{
+      await supabase.from('skin_routine_items').delete().eq('id', item.id);
+      setSkinRoutineItems(p=>p.filter(x=>x.id!==item.id));
+      setSkinRoutineLogs(p=>p.filter(l=>l.item_id!==item.id));
+    }catch(e){
+      console.error('Error deleting routine item:', e);
+    }
+  };
+
+  const toggleSkinRoutine = async (itemId, dateStr) => {
+    const ex = skinRoutineLogs.find(l=>l.item_id===itemId && l.date===dateStr);
+    try{
+      if(ex){
+        await supabase.from('skin_routine_logs').delete().eq('id', ex.id);
+        setSkinRoutineLogs(p=>p.filter(l=>l.id!==ex.id));
+      }else{
+        const { data, error } = await supabase
+          .from('skin_routine_logs')
+          .insert({ item_id: itemId, date: dateStr })
+          .select()
+          .single();
+        if(error) throw error;
+        if(data) setSkinRoutineLogs(p=>[...p,data]);
+      }
+    }catch(e){
+      console.error('Error toggling routine log:', e);
     }
   };
 
@@ -943,6 +1001,9 @@ export default function LifeOS(){
 
   const VSkin=()=>{
     const photoDatesSorted=Object.keys(skinPhotos).sort().reverse();
+    const week7 = Array.from({length:7},(_,i)=>shiftDate(skinRoutineWeekAnchor, i-6));
+    const isDone = (itemId, dateStr) => skinRoutineLogs.some(l=>l.item_id===itemId && l.date===dateStr);
+    const itemsBy = (routine) => skinRoutineItems.filter(i=>i.routine===routine);
     return(<div>
       <PH title='Skin' right={<Btn onClick={()=>setSkinCompareMode(m=>!m)} variant={skinCompareMode?'accent':'ghost'} size='sm'>{skinCompareMode?'Exit Compare':'⇔ Compare'}</Btn>}/>
       {skinCompareMode?(<Card>
@@ -979,6 +1040,95 @@ export default function LifeOS(){
                 <input type='file' accept='image/*' style={{display:'none'}} onChange={e=>handleSkin(e,todayStr)}/>
               </label>}
             </Card>
+
+            <div style={{marginTop:'12px',display:'grid',gap:'12px'}}>
+              {(['morning','night']).map((r)=>(
+                <Card key={r} style={{padding:'16px'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                    <SLabel>{r==='morning'?'Morning routine':'Night routine'}</SLabel>
+                    <Badge color='mut'>{itemsBy(r).length}</Badge>
+                  </div>
+
+                  <div style={{display:'flex',gap:'8px',marginBottom:'10px'}}>
+                    <Input
+                      value={skinRoutineForm.routine===r ? skinRoutineForm.name : ''}
+                      onChange={(v)=>setSkinRoutineForm({ routine:r, name:v })}
+                      placeholder={r==='morning'?'Add item (e.g. sunscreen)':'Add item (e.g. retinol)'}
+                    />
+                    <Btn onClick={addSkinRoutineItem} disabled={skinRoutineForm.routine!==r || !skinRoutineForm.name.trim()}>Add</Btn>
+                  </div>
+
+                  {itemsBy(r).length===0 ? (
+                    <div style={{color:C.mut,fontSize:'12px'}}>No items yet.</div>
+                  ) : (
+                    <div style={{overflowX:'auto'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',color:C.mut,fontSize:'11px'}}>
+                        <span>Week {fmt(week7[0])} – {fmt(week7[6])}</span>
+                        <div style={{display:'flex',gap:'6px'}}>
+                          <button type='button' onClick={()=>setSkinRoutineWeekAnchor(shiftDate(skinRoutineWeekAnchor,-7))} style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}>‹ Prev</button>
+                          <button type='button' onClick={()=>setSkinRoutineWeekAnchor(shiftDate(skinRoutineWeekAnchor,7))} style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}>Next ›</button>
+                        </div>
+                      </div>
+
+                      <table style={{width:'100%',borderCollapse:'collapse',minWidth:'560px'}}>
+                        <thead>
+                          <tr>
+                            <th style={{color:C.mut,fontSize:'11px',textAlign:'left',padding:'4px 8px',fontWeight:600,width:'180px'}}>Item</th>
+                            {week7.map(d=>{
+                              const dt=new Date(d+'T00:00');
+                              return (
+                                <th key={d} style={{color:d===todayStr?C.text:C.mut,fontSize:'10px',textAlign:'center',padding:'4px 6px',fontWeight:d===todayStr?700:500}}>
+                                  <div>{getDayName(dt.getDay())}</div>
+                                  <div style={{fontWeight:400,marginTop:'1px'}}>{dt.getDate()}</div>
+                                </th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {itemsBy(r).map(item=>(
+                            <tr key={item.id} style={{borderTop:`1px solid ${C.bord}`}}>
+                              <td style={{padding:'8px'}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'8px'}}>
+                                  <span style={{fontWeight:600,fontSize:'13px'}}>{item.name}</span>
+                                  <button onClick={()=>{ if(window.confirm('Delete this routine item?')) deleteSkinRoutineItem(item); }} style={{background:'transparent',border:'none',color:C.dan,cursor:'pointer',fontSize:'13px'}}>✕</button>
+                                </div>
+                              </td>
+                              {week7.map(d=>{
+                                const done = isDone(item.id, d);
+                                return (
+                                  <td key={d} style={{textAlign:'center',padding:'8px 6px'}}>
+                                    <button
+                                      onClick={()=>toggleSkinRoutine(item.id, d)}
+                                      style={{
+                                        width:'28px',
+                                        height:'28px',
+                                        borderRadius:'7px',
+                                        border: done ? `1px solid ${C.accBord}` : `1px solid ${C.bord}`,
+                                        background: done ? C.acc : 'transparent',
+                                        color: done ? '#fff' : C.mut,
+                                        cursor:'pointer',
+                                        fontSize:'14px',
+                                        fontWeight:800,
+                                        display:'inline-flex',
+                                        alignItems:'center',
+                                        justifyContent:'center'
+                                      }}
+                                    >
+                                      {done?'✓':'·'}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
           </div>
           <div>
             <Cal activeDates={Object.keys(skinPhotos)} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.pink}/>
