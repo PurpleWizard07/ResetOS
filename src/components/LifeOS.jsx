@@ -1465,20 +1465,64 @@ export default function LifeOS(){
           <div style={{color:C.mut,fontSize:'11px',marginTop:'3px'}}>{s}</div>
         </Card>)}
       </div>
-      <div style={{display:'grid',gap:'8px'}}>
-        {companies.map(c=><Card key={c.id} style={{padding:'14px'}}>
-          <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1.5fr 2fr',gap:'12px',alignItems:'center'}}>
-            <div><div style={{fontWeight:700,fontSize:'13px'}}>{c.name}</div><div style={{color:C.mut,fontSize:'11px'}}>{c.role}</div></div>
-            <div style={{fontWeight:700,color:C.acc,fontSize:'13px'}}>{c.ctc}</div>
-            <Badge color={statCol[c.status]}>{c.status}</Badge>
-            <Sel value={c.status} onChange={async(v)=>{
-              await supabase.from('companies').update({status:v}).eq('id',c.id);
-              setCompanies(p=>p.map(co=>co.id===c.id?{...co,status:v}:co));
-            }} options={statOpts} style={{fontSize:'11px',padding:'4px 8px'}}/>
-            <div style={{color:C.mut,fontSize:'12px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.note}</div>
-          </div>
-        </Card>)}
-      </div>
+      <Card style={{padding:'0',overflow:'hidden'}}>
+        <div style={{padding:'12px 14px',background:C.high,borderBottom:`1px solid ${C.bord}`,display:'grid',gridTemplateColumns:'2fr 1fr 1fr 2fr 160px',gap:'12px',alignItems:'center'}}>
+          <div style={{color:C.mut,fontSize:'11px',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase'}}>Company</div>
+          <div style={{color:C.mut,fontSize:'11px',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase'}}>CTC</div>
+          <div style={{color:C.mut,fontSize:'11px',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase'}}>Status</div>
+          <div style={{color:C.mut,fontSize:'11px',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase'}}>Note</div>
+          <div style={{color:C.mut,fontSize:'11px',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',textAlign:'right'}}>Actions</div>
+        </div>
+        <div style={{display:'grid'}}>
+          {companies.map((c,i)=>(
+            <div key={c.id} style={{padding:'12px 14px',display:'grid',gridTemplateColumns:'2fr 1fr 1fr 2fr 160px',gap:'12px',alignItems:'center',borderBottom:i<companies.length-1?`1px solid ${C.bord}`:'none'}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:'13px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                <div style={{color:C.mut,fontSize:'11px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.role}</div>
+              </div>
+              <div style={{fontWeight:700,color:C.acc,fontSize:'13px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.ctc}</div>
+              <Badge color={statCol[c.status]}>{c.status}</Badge>
+              <div style={{color:C.mut,fontSize:'12px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={c.note||''}>{c.note}</div>
+              <div style={{display:'flex',justifyContent:'flex-end',gap:'6px'}}>
+                <button
+                  onClick={async()=>{
+                    const nextStatus = window.prompt(`Status (${statOpts.join(', ')})`, c.status || '');
+                    if(nextStatus===null) return;
+                    const statusVal = statOpts.includes(nextStatus) ? nextStatus : c.status;
+                    const nextRole = window.prompt('Role', c.role || '');
+                    if(nextRole===null) return;
+                    const nextCtc = window.prompt('CTC', c.ctc || '');
+                    if(nextCtc===null) return;
+                    const nextNote = window.prompt('Note', c.note || '');
+                    if(nextNote===null) return;
+                    const { data } = await supabase
+                      .from('companies')
+                      .update({ status: statusVal, role: nextRole, ctc: nextCtc, note: nextNote })
+                      .eq('id', c.id)
+                      .select()
+                      .single();
+                    if(data) setCompanies(p=>p.map(x=>x.id===c.id?data:x));
+                  }}
+                  style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={async()=>{
+                    if(!window.confirm('Delete this company?')) return;
+                    await supabase.from('companies').delete().eq('id', c.id);
+                    setCompanies(p=>p.filter(x=>x.id!==c.id));
+                  }}
+                  style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.dan,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          {companies.length===0&&<div style={{color:C.mut,textAlign:'center',padding:'40px'}}>No companies yet</div>}
+        </div>
+      </Card>
     </div>);
   };
 
