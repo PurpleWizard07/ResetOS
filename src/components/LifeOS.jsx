@@ -48,8 +48,8 @@ const iVits=[
   {id:4,name:'Zinc',dose:'25mg',frequency:'Mon,Wed,Fri',color:C.pink},
 ];
 const iVitLogs=[
-  {id:iD(30),vitaminId:1,date:daysAgo(0)},{id:iD(31),vitaminId:2,date:daysAgo(0)},
-  {id:iD(32),vitaminId:3,date:daysAgo(1)},{id:iD(33),vitaminId:1,date:daysAgo(1)},
+  {id:iD(30),vitamin_id:1,date:daysAgo(0)},{id:iD(31),vitamin_id:2,date:daysAgo(0)},
+  {id:iD(32),vitamin_id:3,date:daysAgo(1)},{id:iD(33),vitamin_id:1,date:daysAgo(1)},
 ];
 const iDSA=[
   {id:iD(10),date:daysAgo(0),name:'Two Sum',source:'LeetCode',link:'https://leetcode.com/problems/two-sum',tags:['Array','HashMap'],difficulty:'Easy',notes:'Classic O(n) hashmap approach. Store complement as key, index as value. Single pass through the array.'},
@@ -671,7 +671,7 @@ export default function LifeOS(){
     setJEditing(false);
   };
   const toggleVit=async(vitId,date)=>{
-    const ex=vitaminLogs.find(l=>l.vitaminId===vitId&&l.date===date);
+    const ex=vitaminLogs.find(l=>l.vitamin_id===vitId&&l.date===date);
     if(ex) {
       // Delete existing log
       await supabase.from('vitamin_logs').delete().eq('id', ex.id);
@@ -680,7 +680,7 @@ export default function LifeOS(){
       // Insert new log
       const { data } = await supabase
         .from('vitamin_logs')
-        .insert({ vitaminId: vitId, date: date })
+        .insert({ vitamin_id: vitId, date: date })
         .select()
         .single();
       if (data) setVitaminLogs(p=>[...p, data]);
@@ -1256,7 +1256,7 @@ export default function LifeOS(){
 
   const VVitamin=()=>{
     const last7=Array.from({length:7},(_,i)=>shiftDate(vitWeekAnchor, i-6));
-    const isTaken=(vitId,date)=>vitaminLogs.some(l=>l.vitaminId===vitId&&l.date===date);
+    const isTaken=(vitId,date)=>vitaminLogs.some(l=>l.vitamin_id===vitId&&l.date===date);
 
     const parseFrequencyDays = (freq) => {
       if (!freq) return new Set();
@@ -1449,20 +1449,6 @@ export default function LifeOS(){
           </tr>)}</tbody>
         </table>
       </Card>
-      <SLabel>Today</SLabel>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'8px'}}>
-        {vitamins.map(v=>{const taken=isTaken(v.id,todayStr);return<Card key={v.id} onClick={()=>toggleVit(v.id,todayStr)} style={{padding:'14px',cursor:'pointer',display:'flex',alignItems:'center',gap:'12px',background:taken?C.accBg:C.surf,border:`1px solid ${taken?C.accBord:C.bord}`,transition:'all 0.15s'}}>
-          <div style={{width:'32px',height:'32px',borderRadius:'8px',background:C.high,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px',flexShrink:0}}>
-            {taken?<span style={{color:C.acc,fontWeight:800}}>✓</span>:<span style={{color:C.mut}}>○</span>}
-          </div>
-          <div>
-            <div style={{fontWeight:700,fontSize:'13px',color:taken?C.text:C.mut}}>{v.name}</div>
-            <div style={{fontSize:'11px',color:taken?C.acc:C.mut}}>
-              {v.dose}{v.frequency ? ` · ${v.frequency}` : ''} · {taken?'Taken ✓':'Tap to mark'}
-            </div>
-          </div>
-        </Card>;})}
-      </div>
     </div>);
   };
 
