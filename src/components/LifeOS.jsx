@@ -694,11 +694,11 @@ export default function LifeOS(){
     return(<div>
       <div style={{marginBottom:'32px'}}>
         <div style={{color:C.mut,fontSize:'11px',fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:'4px'}}>{new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</div>
-        <h1 style={{fontSize:'30px',fontWeight:800,letterSpacing:'-0.03em',margin:0}}>{greet}</h1>
+        <h1 style={{fontSize:isMobile?'24px':'30px',fontWeight:800,letterSpacing:'-0.03em',margin:0}}>{greet}</h1>
       </div>
       <div style={{marginBottom:'24px'}}>
         <SLabel>Streaks</SLabel>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)',gap:'10px'}}>
           {streaks.map(s=><Card key={s.l} style={{padding:'18px',textAlign:'center'}}>
             <div style={{fontSize:'32px',fontWeight:800,color:s.c,fontFamily:"'JetBrains Mono',monospace",lineHeight:1}}>{s.v}</div>
             <div style={{color:C.mut,fontSize:'10px',fontWeight:600,letterSpacing:'0.08em',marginTop:'5px',textTransform:'uppercase'}}>{s.l}</div>
@@ -707,7 +707,7 @@ export default function LifeOS(){
       </div>
       <div style={{marginBottom:'24px'}}>
         <SLabel>Today</SLabel>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'10px'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(2,1fr)',gap:'10px'}}>
           {today.map(s=><Card key={s.label} onClick={()=>go(s.nav)} style={{padding:'16px',display:'flex',alignItems:'center',gap:'12px',cursor:'pointer'}}>
             <div style={{width:'36px',height:'36px',borderRadius:'8px',flexShrink:0,background:s.done?C.sucBg:C.bord,display:'flex',alignItems:'center',justifyContent:'center',color:s.done?C.suc:C.mut,fontWeight:800,fontSize:'14px'}}>{s.done?'✓':'·'}</div>
             <div>
@@ -719,7 +719,7 @@ export default function LifeOS(){
       </div>
       <div style={{marginBottom:'24px'}}>
         <SLabel>Career snapshot</SLabel>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(3,1fr)',gap:'10px'}}>
           <Card style={{padding:'14px'}}>
             <div style={{fontSize:'12px',color:C.mut,marginBottom:'4px'}}>Interviews today</div>
             <div style={{fontSize:'24px',fontWeight:800,fontFamily:"'JetBrains Mono',monospace"}}>{interviewsToday}</div>
@@ -736,7 +736,7 @@ export default function LifeOS(){
       </div>
       <div style={{marginBottom:'24px'}}>
         <SLabel>Study focus</SLabel>
-        <Card style={{padding:'14px',display:'grid',gridTemplateColumns:'1.2fr 1.2fr 1fr',gap:'10px',alignItems:'center'}}>
+        <Card style={{padding:'14px',display:'grid',gridTemplateColumns:isMobile?'1fr':'1.2fr 1.2fr 1fr',gap:'10px',alignItems:'center'}}>
           <div>
             <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>DSA today</div>
             <div style={{fontSize:'13px',fontWeight:600}}>{dsaTodayLabel}</div>
@@ -770,14 +770,14 @@ export default function LifeOS(){
     const selLog=waterLogs.filter(l=>l.date===selectedDate);
     return(<div>
       <PH title='Water' right={<Badge color={waterPct>=100?'suc':'acc'}>{waterPct}% of goal</Badge>}/>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
         <div>
           <Card style={{marginBottom:'12px'}}>
             <SLabel>{activeDate===todayStr?'Today':fmtLong(activeDate)} — {waterLogs.filter(l=>l.date===activeDate).reduce((s,l)=>s+l.amount,0)}ml / {waterGoal}ml</SLabel>
             <div style={{background:C.bord,borderRadius:'999px',height:'8px',marginBottom:'16px',overflow:'hidden'}}>
               <div style={{background:`linear-gradient(90deg,${C.acc},${C.blue})`,height:'100%',width:`${waterPct}%`,borderRadius:'999px',transition:'width 0.4s'}}/>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'10px'}}>
+            <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(3,1fr)':'1fr 1fr 1fr',gap:'8px',marginBottom:'10px'}}>
               {[200,300,500].map(a=><button key={a} onClick={()=>addWater(a)} style={{background:C.accBg,border:`1px solid ${C.accBord}`,borderRadius:'8px',color:C.acc,fontFamily:'inherit',fontWeight:700,fontSize:'14px',padding:'12px 0',cursor:'pointer'}}>+{a}</button>)}
             </div>
             <div style={{display:'flex',gap:'8px',marginBottom:'8px'}}>
@@ -864,7 +864,7 @@ export default function LifeOS(){
     const recent=[...sleepLogs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,14);
     return(<div>
       <PH title='Sleep' right={<Badge color={badgeColor}>{badgeText}</Badge>}/>
-      <div style={{display:'grid',gridTemplateColumns:'1.1fr 0.9fr',gap:'20px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1.1fr 0.9fr',gap:'20px'}}>
         <div>
           <Card style={{marginBottom:'12px'}}>
             <SLabel>Log sleep</SLabel>
@@ -994,11 +994,11 @@ export default function LifeOS(){
           </div>
         </Card>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1.1fr 0.9fr',gap:'20px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1.1fr 0.9fr',gap:'20px'}}>
         <div>
           <Card style={{marginBottom:'12px'}}>
             <SLabel>Today\'s check-in</SLabel>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px'}}>
+            <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'10px',marginBottom:'10px'}}>
               <div>
                 <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Date</div>
                 <Input type='date' value={crackerDate} onChange={v=>setCrackerDate(v)}/>
@@ -1010,7 +1010,7 @@ export default function LifeOS(){
                 </div>
               </div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'10px'}}>
+            <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)',gap:'8px',marginBottom:'10px'}}>
               <button
                 type='button'
                 onClick={()=>toggleField('content')}
@@ -1167,7 +1167,7 @@ export default function LifeOS(){
       }}>+ Add Vitamin</Btn>}/>
       {showVitForm&&<Card style={{marginBottom:'16px'}}>
         <SLabel>{editingVitamin?'Edit vitamin':'New vitamin'}</SLabel>
-        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:'8px',marginBottom:'8px'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'2fr 1fr',gap:'8px',marginBottom:'8px'}}>
           <Input value={vitForm.name} onChange={v=>setVitForm(f=>({...f,name:v}))} placeholder='Vitamin name *'/>
           <Input value={vitForm.dose} onChange={v=>setVitForm(f=>({...f,dose:v}))} placeholder='Dose'/>
         </div>
@@ -1348,14 +1348,14 @@ export default function LifeOS(){
             <Sel value={skinCmpB} onChange={setSkinCmpB} options={[{v:'',l:'Select date'},...photoDatesSorted.map(d=>({v:d,l:fmt(d)}))]}/>
           </div>
         </div>
-        {skinCmpA&&skinCmpB?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
+        {skinCmpA&&skinCmpB?<div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'16px'}}>
           {[skinCmpA,skinCmpB].map(d=><div key={d} style={{textAlign:'center'}}>
             <div style={{color:C.mut,fontSize:'12px',fontWeight:600,marginBottom:'8px'}}>{fmtLong(d)}</div>
             <img src={skinPhotos[d]} alt='' style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:'10px',border:`1px solid ${C.bord}`}}/>
           </div>)}
         </div>:<div style={{color:C.mut,textAlign:'center',padding:'40px'}}>Select two dates above to compare</div>}
       </Card>):(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
           <div>
             <Card>
               <SLabel>Today — {fmt(todayStr)}</SLabel>
@@ -1490,7 +1490,7 @@ export default function LifeOS(){
     const selLogs=perf.filter(l=>l.date===selectedDate);
     return(<div>
       <PH title='Strength' right={<Badge color='suc'>{workoutStreak}d streak</Badge>}/>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
         <div>
           <Card style={{marginBottom:'12px'}}>
             <SLabel>Log workout</SLabel>
@@ -1605,13 +1605,13 @@ export default function LifeOS(){
     }).sort((a,b)=>b.date.localeCompare(a.date));
     return(<div>
       <PH title='DSA' right={<><Badge color='acc'>{dsaStreak}d streak</Badge><Badge color='suc'>{dsa.length} solved</Badge><Badge color='mut'>today: {todayDSA}</Badge></>}/>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
         <div>
           <Card>
             <SLabel>Log problem</SLabel>
             <div style={{display:'grid',gap:'8px'}}>
               <Input value={dsaForm.name} onChange={v=>setDsaForm(f=>({...f,name:v}))} placeholder='Problem name *'/>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
+              <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'8px'}}>
                 <Sel value={dsaForm.source} onChange={v=>setDsaForm(f=>({...f,source:v}))} options={['LeetCode','GeeksForGeeks','CodeForces','HackerRank','InterviewBit','Other']}/>
                 <Sel value={dsaForm.difficulty} onChange={v=>setDsaForm(f=>({...f,difficulty:v}))} options={['Easy','Medium','Hard']}/>
               </div>
@@ -1624,7 +1624,7 @@ export default function LifeOS(){
         </div>
         <div>
           <Card style={{marginBottom:'10px',padding:'14px'}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px'}}>
+            <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr',gap:'8px'}}>
               <Sel value={dsaFilter.source} onChange={v=>setDsaFilter(f=>({...f,source:v}))} options={sources}/>
               <Sel value={dsaFilter.difficulty} onChange={v=>setDsaFilter(f=>({...f,difficulty:v}))} options={['All','Easy','Medium','Hard']}/>
               <Input value={dsaFilter.tag} onChange={v=>setDsaFilter(f=>({...f,tag:v}))} placeholder='Filter by tag'/>
@@ -1674,7 +1674,7 @@ export default function LifeOS(){
 
         <Card style={{marginBottom:'14px'}}>
           <SLabel>Add note</SLabel>
-          <div style={{display:'grid',gridTemplateColumns:'minmax(0,2fr) minmax(0,1.4fr)',gap:'10px',alignItems:'stretch'}}>
+          <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'minmax(0,2fr) minmax(0,1.4fr)',gap:'10px',alignItems:'stretch'}}>
             <Input
               value={isActiveSection ? htmlNoteForm.name : ''}
               onChange={v=>setHtmlNoteForm({ section, name:v, file:isActiveSection?htmlNoteForm.file:null })}
@@ -1769,7 +1769,7 @@ export default function LifeOS(){
 
         <Card style={{marginBottom:'14px'}}>
           <SLabel>Add note</SLabel>
-          <div style={{display:'grid',gridTemplateColumns:'minmax(0,2fr) minmax(0,1.4fr)',gap:'10px',alignItems:'stretch'}}>
+          <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'minmax(0,2fr) minmax(0,1.4fr)',gap:'10px',alignItems:'stretch'}}>
             <Input
               value={isActiveSection ? htmlNoteForm.name : ''}
               onChange={v=>setHtmlNoteForm({ section, name:v, file:isActiveSection?htmlNoteForm.file:null })}
@@ -1856,7 +1856,7 @@ export default function LifeOS(){
   const VSystemDesign=()=>(
     <div>
       <PH title='System Design' right={<Btn size='sm' onClick={()=>{setSdModal('new');setSdForm({topic:'',notes:'',refs:''});}}>+ Add Topic</Btn>}/>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'12px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(2,1fr)',gap:'12px'}}>
         {systemDesign.map(s=><Card key={s.id} style={{padding:'0',overflow:'hidden'}}>
           <div style={{padding:'14px 18px',background:C.high,borderBottom:`1px solid ${C.bord}`,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
             <div style={{fontWeight:700,fontSize:'14px',flex:1,marginRight:'8px'}}>{s.topic}</div>
@@ -1889,7 +1889,7 @@ export default function LifeOS(){
       <PH title='Interview' right={<Btn size='sm' onClick={()=>setShowIvForm(f=>!f)}>+ Log Interview</Btn>}/>
       {showIvForm&&<Card style={{marginBottom:'16px'}}>
         <SLabel>Log interview experience</SLabel>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr',gap:'8px',marginBottom:'8px'}}>
           <Input value={ivForm.company} onChange={v=>setIvForm(f=>({...f,company:v}))} placeholder='Company *'/>
           <Sel value={ivForm.type} onChange={v=>setIvForm(f=>({...f,type:v}))} options={['DSA','System Design','Behavioral','Mixed']}/>
           <Input value={ivForm.round} onChange={v=>setIvForm(f=>({...f,round:v}))} placeholder='Round'/>
@@ -1900,7 +1900,7 @@ export default function LifeOS(){
         <Textarea value={ivForm.notes} onChange={v=>setIvForm(f=>({...f,notes:v}))} placeholder='Questions asked, approach, feedback, what to improve...' rows={4}/>
         <div style={{display:'flex',gap:'8px',marginTop:'8px'}}><Btn onClick={addInterview} disabled={!ivForm.company.trim()}>Save</Btn><Btn onClick={()=>setShowIvForm(false)} variant='ghost'>Cancel</Btn></div>
       </Card>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px',marginBottom:'20px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)',gap:'10px',marginBottom:'20px'}}>
         {['Passed','Pending','Failed','No Show'].map(r=><Card key={r} style={{padding:'14px',textAlign:'center'}}>
           <div style={{fontSize:'26px',fontWeight:800,color:C[rCol[r]]||C.mut,fontFamily:"'JetBrains Mono',monospace"}}>{interviews.filter(i=>i.result===r).length}</div>
           <div style={{color:C.mut,fontSize:'11px',marginTop:'3px'}}>{r}</div>
@@ -1930,24 +1930,26 @@ export default function LifeOS(){
       <PH title='Companies' right={<Btn onClick={()=>setShowCoForm(f=>!f)}>+ Add Company</Btn>}/>
       {showCoForm&&<Card style={{marginBottom:'16px'}}>
         <SLabel>New company</SLabel>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr',gap:'8px',marginBottom:'8px'}}>
           <Input value={coForm.name} onChange={v=>setCoForm(f=>({...f,name:v}))} placeholder='Company *'/>
           <Input value={coForm.ctc} onChange={v=>setCoForm(f=>({...f,ctc:v}))} placeholder='Target CTC'/>
           <Input value={coForm.role} onChange={v=>setCoForm(f=>({...f,role:v}))} placeholder='Role'/>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:'8px',marginBottom:'8px'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 2fr',gap:'8px',marginBottom:'8px'}}>
           <Sel value={coForm.status} onChange={v=>setCoForm(f=>({...f,status:v}))} options={statOpts}/>
           <Input value={coForm.note} onChange={v=>setCoForm(f=>({...f,note:v}))} placeholder='Note'/>
         </div>
         <div style={{display:'flex',gap:'8px'}}><Btn onClick={addCompany} disabled={!coForm.name.trim()}>Save</Btn><Btn onClick={()=>setShowCoForm(false)} variant='ghost'>Cancel</Btn></div>
       </Card>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px',marginBottom:'16px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)',gap:'10px',marginBottom:'16px'}}>
         {['Applied','OA','Interview','Offer'].map(s=><Card key={s} style={{padding:'14px',textAlign:'center'}}>
           <div style={{fontSize:'26px',fontWeight:800,color:s==='Offer'?C.suc:C.text,fontFamily:"'JetBrains Mono',monospace"}}>{companies.filter(c=>c.status===s).length}</div>
           <div style={{color:C.mut,fontSize:'11px',marginTop:'3px'}}>{s}</div>
         </Card>)}
       </div>
       <Card style={{padding:'0',overflow:'hidden'}}>
+        <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+        <div style={{minWidth:isMobile?'560px':undefined}}>
         <div style={{padding:'12px 14px',background:C.high,borderBottom:`1px solid ${C.bord}`,display:'grid',gridTemplateColumns:'2fr 1fr 1fr 2fr 160px',gap:'12px',alignItems:'center'}}>
           <div style={{color:C.mut,fontSize:'11px',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase'}}>Company</div>
           <div style={{color:C.mut,fontSize:'11px',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase'}}>CTC</div>
@@ -2004,6 +2006,8 @@ export default function LifeOS(){
           ))}
           {companies.length===0&&<div style={{color:C.mut,textAlign:'center',padding:'40px'}}>No companies yet</div>}
         </div>
+        </div>
+        </div>
       </Card>
     </div>);
   };
@@ -2014,7 +2018,7 @@ export default function LifeOS(){
     const diff=latest&&prev?(latest.weight-prev.weight).toFixed(1):null;
     return(<div>
       <PH title='Weight'/>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
         <div>
           {latest&&<Card style={{marginBottom:'12px'}}>
             <SLabel>Latest</SLabel>
@@ -2068,7 +2072,7 @@ export default function LifeOS(){
     const showForm=jEditing||!todayEntry;
     return(<div>
       <PH title='Journal' right={<Badge color='war'>{journalStreak}d streak</Badge>}/>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px'}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
         <div>
           <Card>
             <SLabel>{showForm?(todayEntry?'Edit entry':'New entry'): 'Today — '+fmtLong(todayStr)}</SLabel>
