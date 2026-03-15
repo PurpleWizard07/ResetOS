@@ -2196,72 +2196,83 @@ export default function LifeOS(){
   };
 
   const VJournal=()=>{
-    const todayEntry=journal.find(e=>e.date===todayStr);
-    const selEntry=journal.find(e=>e.date===selectedDate);
-    const showForm=jEditing||!todayEntry;
+    // active date is whatever the user last picked (defaults to today)
+    const activeDate = journalDate || todayStr;
+    const activeEntry = journal.find(e=>e.date===activeDate);
+    const isToday = activeDate===todayStr;
+    const showForm = jEditing || !activeEntry;
+
+    const startEdit = (entry) => {
+      setJForm({title: entry?.title||'', content: entry?.content||''});
+      setJEditing(true);
+    };
+    const cancelEdit = () => { setJEditing(false); setJForm({title:'',content:''}); };
+    const deleteEntry = async (entry) => {
+      if(!window.confirm('Delete this entry?')) return;
+      await supabase.from('journal_entries').delete().eq('id', entry.id);
+      setJournal(p=>p.filter(e=>e.id!==entry.id));
+      setJEditing(false);
+      setJForm({title:'',content:''});
+    };
+
     return(<div>
       <PH title='Journal' right={<Badge color='war'>{journalStreak}d streak</Badge>}/>
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
         <div>
           <Card>
-            <SLabel>{showForm?(todayEntry?'Edit entry':'New entry'): 'Today — '+fmtLong(todayStr)}</SLabel>
-            {showForm?<div style={{display:'grid',gap:'8px'}}>
-              <Input type='date' value={journalDate} onChange={v=>setJournalDate(v)} placeholder=''/>
-              <Input value={jForm.title} onChange={v=>setJForm(f=>({...f,title:v}))} placeholder='Title (optional)'/>
-              <Textarea value={jForm.content} onChange={v=>setJForm(f=>({...f,content:v}))} placeholder={'What happened today?\nHow do you feel?\nWhat are you working towards?'} rows={8}/>
-              <div style={{display:'flex',gap:'8px'}}>
-                <Btn onClick={()=>saveJournal(journalDate)} disabled={!jForm.content.trim()} full>Save</Btn>
-                {todayEntry&&<Btn onClick={()=>{setJEditing(false);setJForm({title:'',content:''});setJournalDate(todayStr);}} variant='ghost'>Cancel</Btn>}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px'}}>
+              <SLabel style={{marginBottom:0}}>
+                {isToday ? `Today — ${fmtLong(todayStr)}` : fmtLong(activeDate)}
+              </SLabel>
+              {!showForm&&activeEntry&&(
+                <div style={{display:'flex',gap:'6px'}}>
+                  <Btn onClick={()=>startEdit(activeEntry)} variant='ghost' size='sm'>Edit</Btn>
+                  <Btn onClick={()=>deleteEntry(activeEntry)} variant='ghost' size='sm'>Delete</Btn>
+                </div>
+              )}
+            </div>
+            {showForm?(
+              <div style={{display:'grid',gap:'8px'}}>
+                <Input value={jForm.title} onChange={v=>setJForm(f=>({...f,title:v}))} placeholder='Title (optional)'/>
+                <Textarea value={jForm.content} onChange={v=>setJForm(f=>({...f,content:v}))} placeholder={'What happened today?\nHow do you feel?\nWhat are you working towards?'} rows={8}/>
+                <div style={{display:'flex',gap:'8px'}}>
+                  <Btn onClick={()=>saveJournal(activeDate)} disabled={!jForm.content.trim()} full>Save</Btn>
+                  {activeEntry&&<Btn onClick={cancelEdit} variant='ghost'>Cancel</Btn>}
+                </div>
               </div>
-            </div>:<div>
-              {todayEntry.title&&<div style={{fontWeight:700,fontSize:'15px',marginBottom:'10px'}}>{todayEntry.title}</div>}
-              <div style={{color:C.mut,fontSize:'13px',lineHeight:1.8,whiteSpace:'pre-wrap',marginBottom:'16px'}}>{todayEntry.content}</div>
-              <div style={{display:'flex',gap:'8px'}}>
-                <Btn onClick={()=>{setJForm({title:todayEntry.title,content:todayEntry.content});setJournalDate(todayStr);setJEditing(true);}} variant='ghost' size='sm'>Edit</Btn>
-                <Btn
-                  onClick={async()=>{
-                    if(!window.confirm('Delete today\'s entry?')) return;
-                    await supabase.from('journal_entries').delete().eq('id', todayEntry.id);
-                    setJournal(p=>p.filter(e=>e.id!==todayEntry.id));
-                  }}
-                  variant='ghost'
-                  size='sm'
-                >
-                  Delete
-                </Btn>
+            ):(
+              <div>
+                {activeEntry.title&&<div style={{fontWeight:700,fontSize:'15px',marginBottom:'10px'}}>{activeEntry.title}</div>}
+                <div style={{color:C.mut,fontSize:'13px',lineHeight:1.8,whiteSpace:'pre-wrap'}}>{activeEntry.content}</div>
               </div>
-            </div>}
+            )}
           </Card>
         </div>
         <div>
-          <Cal activeDates={journal.map(e=>e.date)} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.war}/>
-          {selEntry&&selectedDate!==todayStr&&<Card style={{marginTop:'10px'}}>
-            <SLabel>{fmtLong(selectedDate)}</SLabel>
-            {selEntry.title&&<div style={{fontWeight:700,fontSize:'14px',marginBottom:'8px'}}>{selEntry.title}</div>}
-            <div style={{color:C.mut,fontSize:'13px',lineHeight:1.8,whiteSpace:'pre-wrap',marginBottom:'12px'}}>{selEntry.content}</div>
-            <div style={{display:'flex',gap:'8px'}}>
-              <Btn
-                onClick={()=>{
-                  setJForm({title:selEntry.title,content:selEntry.content});
-                  setJournalDate(selectedDate);
-                  setJEditing(true);
-                }}
-                variant='ghost'
-                size='sm'
-              >
-                Edit
-              </Btn>
-              <Btn
-                onClick={async()=>{
-                  if(!window.confirm('Delete this entry?')) return;
-                  await supabase.from('journal_entries').delete().eq('id', selEntry.id);
-                  setJournal(p=>p.filter(e=>e.id!==selEntry.id));
-                }}
-                variant='ghost'
-                size='sm'
-              >
-                Delete
-              </Btn>
+          <Cal
+            activeDates={journal.map(e=>e.date)}
+            selectedDate={activeDate}
+            onSelect={(d)=>{ setAllDates(d); setJournalDate(d); setJEditing(false); setJForm({title:'',content:''}); }}
+            calDate={calDate}
+            setCalDate={setCalDate}
+            todayStr={todayStr}
+            dotColor={C.war}
+          />
+          {journal.length>0&&<Card style={{marginTop:'10px'}}>
+            <SLabel>Recent entries</SLabel>
+            <div style={{display:'grid',gap:'2px'}}>
+              {journal.slice(0,8).map(e=>(
+                <button
+                  key={e.id}
+                  onClick={()=>{ setJournalDate(e.date); setAllDates(e.date); setJEditing(false); setJForm({title:'',content:''}); }}
+                  style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 10px',borderRadius:'8px',border:'none',background:activeDate===e.date?C.acc:'transparent',color:activeDate===e.date?'#fff':C.text,cursor:'pointer',textAlign:'left',gap:'10px'}}
+                >
+                  <span style={{fontSize:'12px',fontWeight:600,color:activeDate===e.date?'#fff':C.mut,flexShrink:0}}>{fmt(e.date)}</span>
+                  <span style={{fontSize:'12px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>
+                    {e.title || e.content.split('\n')[0].slice(0,50)}
+                  </span>
+                </button>
+              ))}
             </div>
           </Card>}
         </div>
