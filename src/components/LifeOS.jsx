@@ -14,7 +14,6 @@ import {
   getDayName,
   calcStreak,
 } from "@/lib/dateUtils";
-import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import {
   Badge,
@@ -67,7 +66,7 @@ const iJournal=[
   {id:iD(20),date:daysAgo(1),title:'',content:'Good day. Finished LeetCode after 45 mins of being stuck. Stretching helped with the back pain.'},
   {id:iD(21),date:daysAgo(2),title:'Clarity',content:'Started tracking water properly. Hit 3.2L. Feeling more focused. Diet still off.'},
 ];
-const iSleep=[]; // { id, date, start, end, durationHours }
+const iSleep=[]; // { id, date, start_time, end_time, durationHours }
 const iCracker=[]; // { id, date, content, act, urge, note }
 const iWeight=[
   {id:iD(22),date:daysAgo(0),weight:78.5,note:'Morning'},{id:iD(23),date:daysAgo(2),weight:78.8,note:''},
@@ -133,10 +132,10 @@ export default function LifeOS(){
   const [waterGoal,setWaterGoal]=useState(3000);
   const [wCustom,setWCustom]=useState('');
   const [waterDate,setWaterDate]=useState(toDay());
-  const [sleepLogs,setSleepLogs]=useLocalStorageState('lifeos_sleep_logs', iSleep);
+  const [sleepLogs,setSleepLogs]=useState(iSleep);
   const [sleepDate,setSleepDate]=useState(shiftDate(toDay(),-1));
-  const [sleepForm,setSleepForm]=useState({start:'23:30',end:'07:00'});
-  const [crackerLogs,setCrackerLogs]=useLocalStorageState('lifeos_cracker_logs', iCracker);
+  const [sleepForm,setSleepForm]=useState({start_time:'23:30',end_time:'07:00'});
+  const [crackerLogs,setCrackerLogs]=useState(iCracker);
   const [crackerDate,setCrackerDate]=useState(toDay());
   const [crackerForm,setCrackerForm]=useState({content:false,act:false,urge:false,note:''});
   const [vitamins,setVitamins]=useState(iVits);
@@ -201,6 +200,8 @@ export default function LifeOS(){
       try {
         const [
           waterRes,
+          sleepRes,
+          crackerRes,
           vitaminsRes,
           vitaminLogsRes,
           weightRes,
@@ -216,6 +217,8 @@ export default function LifeOS(){
           htmlNotesRes
         ] = await Promise.all([
           supabase.from('water_logs').select('*').order('created_at', { ascending: true }),
+          supabase.from('sleep_logs').select('*').order('date', { ascending: false }),
+          supabase.from('cracker_logs').select('*').order('date', { ascending: false }),
           supabase.from('vitamins').select('*').order('created_at', { ascending: true }),
           supabase.from('vitamin_logs').select('*'),
           supabase.from('weight_logs').select('*').order('date', { ascending: false }),
@@ -232,6 +235,12 @@ export default function LifeOS(){
         ]);
 
         if (waterRes.data) setWaterLogs(waterRes.data);
+        if (sleepRes.data) {
+          // Map duration_hours to durationHours for consistency
+          const mappedSleep = sleepRes.data.map(s => ({...s, durationHours: s.duration_hours}));
+          setSleepLogs(mappedSleep);
+        }
+        if (crackerRes.data) setCrackerLogs(crackerRes.data);
         if (vitaminsRes.data) setVitamins(vitaminsRes.data);
         if (vitaminLogsRes.data) setVitaminLogs(vitaminLogsRes.data);
         if (weightRes.data) setWeight(weightRes.data);
@@ -856,11 +865,10 @@ export default function LifeOS(){
   const VSleep=()=>{
     const activeDate=sleepDate||lastNightStr;
     const existingForDate=sleepLogs.find(l=>l.date===activeDate);
-    const formDuration=sleepForm.start&&sleepForm.end?calcSleepDurationHours(sleepForm.start,sleepForm.end):0;
+    const formDuration=sleepForm.start_time&&sleepForm.end_time?calcSleepDurationHours(sleepForm.start_time,sleepForm.end_time):0;
     const displayDuration=existingForDate?existingForDate.durationHours:formDuration;
-    const target=8;
-    const badgeText=displayDuration?`${displayDuration.toFixed(1)}h · target ${target}h`:'Not logged';
-    const badgeColor=displayDuration>=target? 'suc' : 'acc';
+    const badgeText=displayDuration?`${displayDuration.toFixed(1)}h`:'Not logged';
+    const badgeColor=displayDuration>=7.5? 'suc' : 'acc';
     const recent=[...sleepLogs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,14);
     return(<div>
       <PH title='Sleep' right={<Badge color={badgeColor}>{badgeText}</Badge>}/>
@@ -884,28 +892,49 @@ export default function LifeOS(){
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
                 <div>
                   <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Sleep time</div>
-                  <Input type='time' value={sleepForm.start} onChange={v=>setSleepForm(f=>({...f,start:v}))}/>
+                  <Input type='time' value={sleepForm.start_time} onChange={v=>setSleepForm(f=>({...f,start_time:v}))}/>
                   <div style={{color:C.mut,fontSize:'11px',marginTop:'2px'}}>Usually when you go to bed (e.g. 23:30)</div>
                 </div>
                 <div>
                   <div style={{color:C.mut,fontSize:'11px',marginBottom:'4px'}}>Wake time</div>
-                  <Input type='time' value={sleepForm.end} onChange={v=>setSleepForm(f=>({...f,end:v}))}/>
+                  <Input type='time' value={sleepForm.end_time} onChange={v=>setSleepForm(f=>({...f,end_time:v}))}/>
                   <div style={{color:C.mut,fontSize:'11px',marginTop:'2px'}}>If earlier than sleep time, counts as next day</div>
                 </div>
               </div>
               <Btn
-                onClick={()=>{
-                  if(!sleepForm.start||!sleepForm.end) return;
-                  const dur=calcSleepDurationHours(sleepForm.start,sleepForm.end);
+                onClick={async()=>{
+                  if(!sleepForm.start_time||!sleepForm.end_time) return;
+                  const dur=calcSleepDurationHours(sleepForm.start_time,sleepForm.end_time);
                   if(!dur) return;
                   const d=sleepDate||lastNightStr;
-                  const next={id:iD(1000),date:d,start:sleepForm.start,end:sleepForm.end,durationHours:dur};
-                  setSleepLogs(p=>{
-                    const filtered=p.filter(l=>l.date!==d);
-                    return[...filtered,next];
-                  });
+                  
+                  // Check if entry exists for this date
+                  const existing = sleepLogs.find(l=>l.date===d);
+                  
+                  if(existing) {
+                    // Update existing entry
+                    const { data } = await supabase
+                      .from('sleep_logs')
+                      .update({ start_time: sleepForm.start_time, end_time: sleepForm.end_time, duration_hours: dur })
+                      .eq('id', existing.id)
+                      .select()
+                      .single();
+                    if(data) {
+                      setSleepLogs(p=>p.map(l=>l.id===existing.id?{...data, durationHours: data.duration_hours}:l));
+                    }
+                  } else {
+                    // Insert new entry
+                    const { data } = await supabase
+                      .from('sleep_logs')
+                      .insert({ date: d, start_time: sleepForm.start_time, end_time: sleepForm.end_time, duration_hours: dur })
+                      .select()
+                      .single();
+                    if(data) {
+                      setSleepLogs(p=>[...p, {...data, durationHours: data.duration_hours}]);
+                    }
+                  }
                 }}
-                disabled={!sleepForm.start||!sleepForm.end}
+                disabled={!sleepForm.start_time||!sleepForm.end_time}
                 full
               >
                 Save sleep
@@ -915,33 +944,33 @@ export default function LifeOS(){
           </Card>
         </div>
         <div>
-          <Card style={{marginBottom:'12px'}}>
-            <SLabel>Last 14 nights</SLabel>
-            {recent.length===0?<div style={{color:C.mut,textAlign:'center',padding:'16px 0'}}>No sleep logged yet</div>:<>
-              <div style={{display:'flex',gap:'4px',marginBottom:'8px',alignItems:'flex-end'}}>
-                {recent.map(l=>{
-                  const pct=Math.min(100,Math.round((l.durationHours/target)*100));
-                  return(
-                    <div key={l.id} style={{flex:1,minWidth:'10px',textAlign:'center'}}>
-                      <div style={{height:'80px',display:'flex',alignItems:'flex-end',justifyContent:'center',marginBottom:'4px'}}>
-                        <div style={{width:'10px',borderRadius:'999px',background:C.high,overflow:'hidden'}}>
-                          <div style={{width:'100%',height:`${pct}%`,background:l.durationHours>=target?C.suc:C.acc}}/>
-                        </div>
-                      </div>
-                      <div style={{fontSize:'9px',color:C.mut}}>{fmt(l.date).split(' ')[1]}</div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{fontSize:'11px',color:C.mut}}>Bar height vs {target}h target. Green = met or exceeded.</div>
-            </>}
-          </Card>
           <Card>
-            <SLabel>How it works</SLabel>
-            <div style={{color:C.mut,fontSize:'12px',lineHeight:1.7}}>
-              Enter when you went to bed and when you woke up. If wake time is earlier than sleep time, it is treated as the next morning so overnight sleep is handled automatically.
-              Sleep streak on the sidebar counts nights with at least 7.5h.
-            </div>
+            <SLabel>Last 14 nights</SLabel>
+            {recent.length===0
+              ?<div style={{color:C.mut,textAlign:'center',padding:'16px 0'}}>No sleep logged yet</div>
+              :recent.map((l,i)=>(
+                <div key={l.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:i<recent.length-1?`1px solid ${C.bord}`:'none'}}>
+                  <div>
+                    <div style={{fontWeight:600,fontSize:'13px'}}>{fmtLong(l.date)}</div>
+                    <div style={{color:C.mut,fontSize:'11px',fontFamily:"'JetBrains Mono',monospace",marginTop:'2px'}}>
+                      {l.start_time} → {l.end_time}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                    <span style={{fontWeight:700,fontSize:'15px',fontFamily:"'JetBrains Mono',monospace",color:l.durationHours>=7.5?C.suc:C.acc}}>
+                      {l.durationHours.toFixed(1)}h
+                    </span>
+                    <button
+                      onClick={async()=>{
+                        await supabase.from('sleep_logs').delete().eq('id',l.id);
+                        setSleepLogs(p=>p.filter(x=>x.id!==l.id));
+                      }}
+                      style={{background:'transparent',border:'none',color:C.dan,cursor:'pointer',fontSize:'13px',padding:'2px 4px'}}
+                    >✕</button>
+                  </div>
+                </div>
+              ))
+            }
           </Card>
         </div>
       </div>
@@ -961,21 +990,40 @@ export default function LifeOS(){
     const toggleField=(field)=>{
       setCrackerForm(f=>({...f,[field]:!f[field]}));
     };
-    const saveEntry=()=>{
+    const saveEntry=async()=>{
       const hasData=crackerForm.content||crackerForm.act||crackerForm.urge||crackerForm.note.trim();
       const d=activeDate;
       if(!hasData){
         // If empty and existing entry, delete it to avoid noise
         if(entryForDate){
+          await supabase.from('cracker_logs').delete().eq('id', entryForDate.id);
           setCrackerLogs(p=>p.filter(l=>l.date!==d));
         }
         return;
       }
-      const next={id:iD(2000),date:d,content:crackerForm.content,act:crackerForm.act,urge:crackerForm.urge,note:crackerForm.note.trim()};
-      setCrackerLogs(p=>{
-        const filtered=p.filter(l=>l.date!==d);
-        return[...filtered,next];
-      });
+      
+      if(entryForDate) {
+        // Update existing entry
+        const { data } = await supabase
+          .from('cracker_logs')
+          .update({ content: crackerForm.content, act: crackerForm.act, urge: crackerForm.urge, note: crackerForm.note.trim() })
+          .eq('id', entryForDate.id)
+          .select()
+          .single();
+        if(data) {
+          setCrackerLogs(p=>p.map(l=>l.id===entryForDate.id?data:l));
+        }
+      } else {
+        // Insert new entry
+        const { data } = await supabase
+          .from('cracker_logs')
+          .insert({ date: d, content: crackerForm.content, act: crackerForm.act, urge: crackerForm.urge, note: crackerForm.note.trim() })
+          .select()
+          .single();
+        if(data) {
+          setCrackerLogs(p=>[...p, data]);
+        }
+      }
     };
     return(<div>
       <PH title='Cracker' right={<Badge color={badgeColor}>{badgeText}</Badge>}/>
@@ -1071,7 +1119,8 @@ export default function LifeOS(){
               {entryForDate&&(
                 <Btn
                   variant='ghost'
-                  onClick={()=>{
+                  onClick={async()=>{
+                    await supabase.from('cracker_logs').delete().eq('id', entryForDate.id);
                     setCrackerForm({content:false,act:false,urge:false,note:''});
                     setCrackerLogs(p=>p.filter(l=>l.date!==activeDate));
                   }}
