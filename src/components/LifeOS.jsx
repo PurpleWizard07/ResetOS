@@ -251,11 +251,14 @@ export default function LifeOS(){
         if (systemDesignRes.data) setSystemDesign(systemDesignRes.data);
         if (interviewsRes.data) setInterviews(interviewsRes.data);
         
-        // Convert skin photos array to map { date: url }
+        // Convert skin photos array to map { date: url[] }
         if (skinPhotosRes.data) {
           const photoMap = skinPhotosRes.data.reduce((acc, row) => {
             const url = row.photo_url || row.url || row.image_url || row.path;
-            if (url) acc[row.date] = url;
+            if (url) {
+              if (!acc[row.date]) acc[row.date] = [];
+              acc[row.date].push({ url, id: row.id, path: row.path || row.storage_path });
+            }
             return acc;
           }, {});
           setSkinPhotos(photoMap);
@@ -271,36 +274,54 @@ export default function LifeOS(){
     loadData();
   }, []);
 
-  // Upload skin photo to Supabase Storage
+  // Upload skin photo to Supabase Storage (supports multiple per date)
   const uploadSkin = async (file, date) => {
     try {
-      // Optimistic local preview so you immediately see the photo
       const localUrl = URL.createObjectURL(file);
-      setSkinPhotos(p => ({ ...p, [date]: localUrl }));
+      const tempId = `temp_${Date.now()}`;
+      setSkinPhotos(p => ({ ...p, [date]: [...(p[date]||[]), { url: localUrl, id: tempId, path: null }] }));
 
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const storagePath = `${date}_${Date.now()}.jpg`;
+      const { error: uploadError } = await supabase.storage
         .from('skin-photos')
-        .upload(`${date}.jpg`, file, { upsert: true });
+        .upload(storagePath, file, { upsert: false });
 
       if (uploadError) throw uploadError;
 
-      // Generate signed URL
       const { data: urlData } = await supabase.storage
         .from('skin-photos')
-        .createSignedUrl(`${date}.jpg`, 60 * 60 * 24 * 365); // 1 year expiry
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
 
       if (urlData?.signedUrl) {
-        // Upsert to skin_photos table
-        await supabase
+        const { data: inserted } = await supabase
           .from('skin_photos')
-          .upsert({ date: date, photo_url: urlData.signedUrl }, { onConflict: 'date' });
+          .insert({ date, photo_url: urlData.signedUrl, path: storagePath })
+          .select()
+          .single();
 
-        // Update React state
-        setSkinPhotos(p => ({ ...p, [date]: urlData.signedUrl }));
+        setSkinPhotos(p => {
+          const existing = (p[date]||[]).filter(x=>x.id!==tempId);
+          return { ...p, [date]: [...existing, { url: urlData.signedUrl, id: inserted?.id || storagePath, path: storagePath }] };
+        });
       }
     } catch (error) {
       console.error('Error uploading skin photo:', error);
+    }
+  };
+
+  const deleteSkinPhoto = async (date, photo) => {
+    try {
+      if (photo.path) await supabase.storage.from('skin-photos').remove([photo.path]);
+      if (photo.id && !String(photo.id).startsWith('temp_')) {
+        await supabase.from('skin_photos').delete().eq('id', photo.id);
+      }
+      setSkinPhotos(p => {
+        const updated = (p[date]||[]).filter(x=>x.id!==photo.id);
+        if (updated.length === 0) { const n={...p}; delete n[date]; return n; }
+        return { ...p, [date]: updated };
+      });
+    } catch (e) {
+      console.error('Error deleting skin photo:', e);
     }
   };
 
@@ -599,7 +620,7 @@ export default function LifeOS(){
     setVitamins(p => p.filter(v => v.id !== vitamin.id));
     setVitaminLogs(p => p.filter(l => l.vitaminId !== vitamin.id));
   };
-  const handleSkin=(e,date)=>{const f=e.target.files[0];if(!f) return;uploadSkin(f,date);};
+  const handleSkin=(e,date)=>{const files=Array.from(e.target.files||[]);files.forEach(f=>uploadSkin(f,date));e.target.value='';};
   const saveSD=async()=>{
     if(!sdForm.topic.trim()) return;
     const refs = sdForm.refs.split(',').map(r=>r.trim()).filter(Boolean);
@@ -1380,9 +1401,60 @@ export default function LifeOS(){
 
   const VSkin=()=>{
     const photoDatesSorted=Object.keys(skinPhotos).sort().reverse();
+    const totalPhotoCount = photoDatesSorted.reduce((s,d)=>s+(skinPhotos[d]||[]).length,0);
     const week7 = Array.from({length:7},(_,i)=>shiftDate(skinRoutineWeekAnchor, i-6));
     const isDone = (itemId, dateStr) => skinRoutineLogs.some(l=>l.item_id===itemId && l.date===dateStr);
     const itemsBy = (routine) => skinRoutineItems.filter(i=>i.routine===routine);
+
+    // Renders a photo grid for a given date with delete + add-more
+    const PhotoGrid = ({ date, showAddMore=false }) => {
+      const photos = skinPhotos[date] || [];
+      return (
+        <div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'6px',marginBottom: showAddMore ? '8px' : 0}}>
+            {photos.map((photo,i)=>(
+              <div key={photo.id||i} style={{position:'relative',borderRadius:'8px',overflow:'hidden',border:`1px solid ${C.bord}`,aspectRatio:'1'}}>
+                <img src={photo.url} alt='' style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+                <button
+                  onClick={()=>{ if(window.confirm('Delete this photo?')) deleteSkinPhoto(date, photo); }}
+                  style={{position:'absolute',top:'4px',right:'4px',background:'rgba(0,0,0,0.6)',border:'none',borderRadius:'50%',width:'22px',height:'22px',color:'#fff',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}
+                >✕</button>
+              </div>
+            ))}
+            {showAddMore&&<label style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',aspectRatio:'1',borderRadius:'8px',border:`2px dashed ${C.bord}`,cursor:'pointer',gap:'4px'}}>
+              <div style={{fontSize:'22px',color:C.mut}}>+</div>
+              <div style={{color:C.mut,fontSize:'10px'}}>Add</div>
+              <input type='file' accept='image/*' capture='environment' multiple style={{display:'none'}} onChange={e=>handleSkin(e,date)}/>
+            </label>}
+          </div>
+        </div>
+      );
+    };
+
+    // Today's card: shows grid if photos exist, else upload prompt
+    const TodayCard = () => {
+      const photos = skinPhotos[todayStr] || [];
+      return (
+        <Card>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+            <SLabel>Today — {fmt(todayStr)}</SLabel>
+            {photos.length>0&&<label style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'8px',padding:'4px 10px',color:C.mut,fontSize:'11px',fontWeight:600,cursor:'pointer'}}>
+              + Add photo
+              <input type='file' accept='image/*' capture='environment' multiple style={{display:'none'}} onChange={e=>handleSkin(e,todayStr)}/>
+            </label>}
+          </div>
+          {photos.length>0
+            ? <PhotoGrid date={todayStr} showAddMore={false}/>
+            : <label style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',aspectRatio:'3/4',borderRadius:'10px',border:`2px dashed ${C.bord}`,cursor:'pointer',gap:'10px'}}>
+                <div style={{fontSize:'32px',color:C.mut}}>+</div>
+                <div style={{color:C.mut,fontSize:'13px'}}>Upload today's photo</div>
+                <input type='file' accept='image/*' capture='environment' multiple style={{display:'none'}} onChange={e=>handleSkin(e,todayStr)}/>
+              </label>
+          }
+        </Card>
+      );
+    };
+
     return(<div>
       <PH title='Skin' right={<Btn onClick={()=>setSkinCompareMode(m=>!m)} variant={skinCompareMode?'accent':'ghost'} size='sm'>{skinCompareMode?'Exit Compare':'⇔ Compare'}</Btn>}/>
       {skinCompareMode?(<Card>
@@ -1397,28 +1469,24 @@ export default function LifeOS(){
             <Sel value={skinCmpB} onChange={setSkinCmpB} options={[{v:'',l:'Select date'},...photoDatesSorted.map(d=>({v:d,l:fmt(d)}))]}/>
           </div>
         </div>
-        {skinCmpA&&skinCmpB?<div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'16px'}}>
-          {[skinCmpA,skinCmpB].map(d=><div key={d} style={{textAlign:'center'}}>
-            <div style={{color:C.mut,fontSize:'12px',fontWeight:600,marginBottom:'8px'}}>{fmtLong(d)}</div>
-            <img src={skinPhotos[d]} alt='' style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:'10px',border:`1px solid ${C.bord}`}}/>
-          </div>)}
+        {skinCmpA&&skinCmpB?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
+          {[skinCmpA,skinCmpB].map(d=>{
+            const photos = skinPhotos[d]||[];
+            return (<div key={d} style={{textAlign:'center'}}>
+              <div style={{color:C.mut,fontSize:'12px',fontWeight:600,marginBottom:'8px'}}>{fmtLong(d)}</div>
+              {photos.length===1
+                ? <img src={photos[0].url} alt='' style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:'10px',border:`1px solid ${C.bord}`}}/>
+                : <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'4px'}}>
+                    {photos.map((p,i)=><img key={i} src={p.url} alt='' style={{width:'100%',aspectRatio:'1',objectFit:'cover',borderRadius:'6px',border:`1px solid ${C.bord}`}}/>)}
+                  </div>
+              }
+            </div>);
+          })}
         </div>:<div style={{color:C.mut,textAlign:'center',padding:'40px'}}>Select two dates above to compare</div>}
       </Card>):(
         <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
           <div>
-            <Card>
-              <SLabel>Today — {fmt(todayStr)}</SLabel>
-              {skinPhotos[todayStr]?<div style={{position:'relative'}}>
-                <img src={skinPhotos[todayStr]} alt='' style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:'10px',border:`1px solid ${C.bord}`}}/>
-                <label style={{position:'absolute',bottom:'10px',right:'10px',background:'rgba(17,17,25,0.85)',border:`1px solid ${C.bord}`,borderRadius:'8px',padding:'6px 12px',color:C.text,fontSize:'11px',fontWeight:600,cursor:'pointer',backdropFilter:'blur(4px)'}}>
-                  Retake <input type='file' accept='image/*' style={{display:'none'}} onChange={e=>handleSkin(e,todayStr)}/>
-                </label>
-              </div>:<label style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',aspectRatio:'3/4',borderRadius:'10px',border:`2px dashed ${C.bord}`,cursor:'pointer',gap:'10px'}}>
-                <div style={{fontSize:'32px',color:C.mut}}>+</div>
-                <div style={{color:C.mut,fontSize:'13px'}}>Upload today's photo</div>
-                <input type='file' accept='image/*' style={{display:'none'}} onChange={e=>handleSkin(e,todayStr)}/>
-              </label>}
-            </Card>
+            <TodayCard/>
 
             <div style={{marginTop:'12px',display:'grid',gap:'12px'}}>
               {(['morning','night']).map((r)=>(
@@ -1512,18 +1580,30 @@ export default function LifeOS(){
           <div>
             <Cal activeDates={Object.keys(skinPhotos)} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.pink}/>
             {selectedDate&&skinPhotos[selectedDate]&&selectedDate!==todayStr&&<Card style={{marginTop:'10px'}}>
-              <SLabel>{fmtLong(selectedDate)}</SLabel>
-              <img src={skinPhotos[selectedDate]} alt='' style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:'8px'}}/>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                <SLabel>{fmtLong(selectedDate)}</SLabel>
+                <label style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'8px',padding:'4px 10px',color:C.mut,fontSize:'11px',fontWeight:600,cursor:'pointer'}}>
+                  + Add
+                  <input type='file' accept='image/*' capture='environment' multiple style={{display:'none'}} onChange={e=>handleSkin(e,selectedDate)}/>
+                </label>
+              </div>
+              <PhotoGrid date={selectedDate} showAddMore={false}/>
             </Card>}
             {photoDatesSorted.length>0&&<Card style={{marginTop:'10px'}}>
-              <SLabel>All photos ({photoDatesSorted.length})</SLabel>
+              <SLabel>All photos ({totalPhotoCount})</SLabel>
               <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'6px'}}>
-                {photoDatesSorted.slice(0,9).map(d=><div key={d} onClick={()=>setSelectedDate(d)} style={{cursor:'pointer',position:'relative',borderRadius:'6px',overflow:'hidden',border:`1px solid ${selectedDate===d?C.pink:C.bord}`}}>
-                  <img src={skinPhotos[d]} alt='' style={{width:'100%',aspectRatio:'1',objectFit:'cover'}}/>
-                  <div style={{position:'absolute',bottom:0,left:0,right:0,background:'linear-gradient(transparent,rgba(0,0,0,0.7)',padding:'4px',textAlign:'center'}}>
-                    <span style={{color:'#fff',fontSize:'9px',fontWeight:600}}>{fmt(d)}</span>
-                  </div>
-                </div>)}
+                {photoDatesSorted.slice(0,12).map(d=>{
+                  const photos=skinPhotos[d]||[];
+                  const first=photos[0];
+                  if(!first) return null;
+                  return (<div key={d} onClick={()=>setSelectedDate(d)} style={{cursor:'pointer',position:'relative',borderRadius:'6px',overflow:'hidden',border:`2px solid ${selectedDate===d?C.pink:C.bord}`}}>
+                    <img src={first.url} alt='' style={{width:'100%',aspectRatio:'1',objectFit:'cover'}}/>
+                    <div style={{position:'absolute',bottom:0,left:0,right:0,background:'linear-gradient(transparent,rgba(0,0,0,0.75))',padding:'4px 4px 3px',display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
+                      <span style={{color:'#fff',fontSize:'9px',fontWeight:600}}>{fmt(d)}</span>
+                      {photos.length>1&&<span style={{color:'rgba(255,255,255,0.8)',fontSize:'9px',fontWeight:600}}>+{photos.length-1}</span>}
+                    </div>
+                  </div>);
+                })}
               </div>
             </Card>}
           </div>
