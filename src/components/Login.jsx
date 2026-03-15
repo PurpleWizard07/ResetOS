@@ -2,19 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-
-const C = {
-  bg: '#09090E',
-  surf: '#111119',
-  high: '#1A1A27',
-  bord: '#252538',
-  text: '#E2E2F0',
-  mut: '#5E5E7A',
-  acc: '#7B70FF',
-  accBg: 'rgba(123,112,255,0.1)',
-  accBord: 'rgba(123,112,255,0.3)',
-  suc: '#3DD6A3',
-};
+import { C } from "@/ui/theme";
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -49,12 +37,8 @@ export default function Login() {
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-      `}</style>
       <div style={{
-        fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif",
+        fontFamily: "var(--font-plus-jakarta), -apple-system, system-ui, sans-serif",
         background: C.bg,
         color: C.text,
         minHeight: '100vh',

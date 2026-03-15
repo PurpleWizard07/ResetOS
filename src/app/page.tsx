@@ -36,7 +36,7 @@ export default function Home() {
         minHeight: '100vh',
         background: '#09090E',
         color: '#E2E2F0',
-        fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif"
+        fontFamily: "var(--font-plus-jakarta), -apple-system, system-ui, sans-serif"
       }}>
         Loading...
       </div>

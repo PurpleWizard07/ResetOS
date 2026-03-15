@@ -1,38 +1,36 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { supabase } from '@/lib/supabase';
-
-const C = {
-  bg:'#09090E',surf:'#111119',high:'#1A1A27',bord:'#252538',
-  text:'#E2E2F0',mut:'#5E5E7A',acc:'#7B70FF',accBg:'rgba(123,112,255,0.1)',
-  accBord:'rgba(123,112,255,0.3)',suc:'#3DD6A3',sucBg:'rgba(61,214,163,0.1)',
-  war:'#F5A623',warBg:'rgba(245,166,35,0.1)',dan:'#FF5E5E',danBg:'rgba(255,94,94,0.1)',
-  blue:'#60A5FA',blueBg:'rgba(96,165,250,0.1)',pink:'#F472B6',pinkBg:'rgba(244,114,182,0.1)',
-};
-
-const toDay=()=>new Date().toISOString().split('T')[0];
-const daysAgo=(n)=>{const d=new Date();d.setDate(d.getDate()-n);return d.toISOString().split('T')[0];};
-const fmt=(d)=>new Date(d+'T00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
-const fmtLong=(d)=>new Date(d+'T00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-const nowT=()=>new Date().toTimeString().slice(0,5);
-const shiftDate=(dStr,delta)=>{const d=new Date(dStr+'T00:00');d.setDate(d.getDate()+delta);return d.toISOString().split('T')[0];};
-const iD=(n)=>Date.now()-n*1000;
-const getDayName=(n)=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][n];
-
-const calcStreak=(dates)=>{
-  if(!dates.length) return 0;
-  const unique=[...new Set(dates)].sort().reverse();
-  const todayD=new Date();todayD.setHours(0,0,0,0);
-  const diffFirst=Math.floor((todayD-new Date(unique[0]+'T00:00:00'))/86400000);
-  if(diffFirst>1) return 0;
-  let streak=0,exp=diffFirst;
-  for(let d of unique){
-    const diff=Math.floor((todayD-new Date(d+'T00:00:00'))/86400000);
-    if(diff===exp){streak++;exp++;}else break;
-  }
-  return streak;
-};
+import { supabase } from "@/lib/supabase";
+import { C } from "@/ui/theme";
+import {
+  toDay,
+  daysAgo,
+  fmt,
+  fmtLong,
+  nowT,
+  shiftDate,
+  iD,
+  getDayName,
+  calcStreak,
+} from "@/lib/dateUtils";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import {
+  Badge,
+  Btn,
+  Input,
+  Textarea,
+  Sel,
+  Card,
+  SLabel,
+  PH,
+  Modal,
+  Cal,
+  NavItem,
+  NavGroup,
+  Divider,
+} from "@/ui/primitives";
 
 // Seed
 const iWater=[
@@ -121,95 +119,7 @@ const iMisc={
   ],
 };
 
-// ─── UI PRIMITIVES ────────────────────────────────────────────────────────────
-const Badge=({children,color='mut'})=>{
-  const map={acc:[C.accBg,C.acc],suc:[C.sucBg,C.suc],war:[C.warBg,C.war],dan:[C.danBg,C.dan],mut:[C.bord,C.mut],blue:[C.blueBg,C.blue],pink:[C.pinkBg,C.pink]};
-  const [bg,col]=map[color]||map.mut;
-  return <span style={{background:bg,color:col,padding:'2px 7px',borderRadius:'4px',fontSize:'11px',fontWeight:600,letterSpacing:'0.02em',display:'inline-block'}}>{children}</span>;
-};
-const Btn=({children,onClick,variant='primary',size='md',disabled,full})=>{
-  const vs={primary:{bg:C.acc,color:'#fff',border:'none'},ghost:{bg:'transparent',color:C.text,border:`1px solid ${C.bord}`},success:{bg:C.sucBg,color:C.suc,border:`1px solid rgba(61,214,163,0.25)`},danger:{bg:C.danBg,color:C.dan,border:`1px solid rgba(255,94,94,0.25)`},accent:{bg:C.accBg,color:C.acc,border:`1px solid ${C.accBord}`}};
-  const ss={sm:'5px 11px',md:'8px 16px',lg:'11px 22px'};const fs={sm:'11px',md:'13px',lg:'14px'};const v=vs[variant]||vs.primary;
-  return(<button onClick={onClick} disabled={disabled} style={{background:v.bg,color:v.color,border:v.border,padding:ss[size],fontSize:fs[size],fontWeight:600,borderRadius:'8px',cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.45:1,fontFamily:'inherit',outline:'none',display:'inline-flex',alignItems:'center',gap:'6px',width:full?'100%':'auto',justifyContent:'center',transition:'opacity 0.15s'}}>{children}</button>);
-};
-const Input=({value,onChange,placeholder,type='text',style={}})=>(
-  <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{background:C.high,border:`1px solid ${C.bord}`,borderRadius:'8px',padding:'9px 12px',color:C.text,fontFamily:'inherit',fontSize:'13px',outline:'none',width:'100%',...style}}/>
-);
-const Textarea=({value,onChange,placeholder,rows=4})=>(
-  <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows} style={{background:C.high,border:`1px solid ${C.bord}`,borderRadius:'8px',padding:'9px 12px',color:C.text,fontFamily:'inherit',fontSize:'13px',outline:'none',width:'100%',resize:'vertical',lineHeight:1.6}}/>
-);
-const Sel=({value,onChange,options,style={}})=>(
-  <select value={value} onChange={e=>onChange(e.target.value)} style={{background:C.high,border:`1px solid ${C.bord}`,borderRadius:'8px',padding:'9px 12px',color:C.text,fontFamily:'inherit',fontSize:'13px',outline:'none',width:'100%',cursor:'pointer',...style}}>
-    {options.map(o=><option key={o.v||o} value={o.v||o}>{o.l||o}</option>)}
-  </select>
-);
-const Card=({children,style={},onClick})=>(
-  <div onClick={onClick} style={{background:C.surf,border:`1px solid ${C.bord}`,borderRadius:'12px',padding:'20px',cursor:onClick?'pointer':'default',...style}}>{children}</div>
-);
-const SLabel=({children})=>(
-  <div style={{color:C.mut,fontSize:'10px',fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:'10px'}}>{children}</div>
-);
-const PH=({title,right})=>(
-  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'28px'}}>
-    <h2 style={{fontSize:'22px',fontWeight:800,letterSpacing:'-0.02em',margin:0}}>{title}</h2>
-    {right&&<div style={{display:'flex',gap:'6px',alignItems:'center'}}>{right}</div>}
-  </div>
-);
-const Modal=({children,onClose,title})=>(
-  <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:'20px'}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.surf,border:`1px solid ${C.bord}`,borderRadius:'14px',padding:'24px',width:'100%',maxWidth:'540px',maxHeight:'85vh',overflowY:'auto'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
-        <div style={{fontWeight:700,fontSize:'16px'}}>{title}</div>
-        <button onClick={onClose} style={{background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:'22px',lineHeight:1,padding:'0 2px'}}>×</button>
-      </div>
-      {children}
-    </div>
-  </div>
-);
-const Cal=({activeDates,selectedDate,onSelect,calDate,setCalDate,todayStr,dotColor=C.acc})=>{
-  const year=calDate.getFullYear(),month=calDate.getMonth();
-  const first=new Date(year,month,1).getDay(),days=new Date(year,month+1,0).getDate();
-  const label=calDate.toLocaleDateString('en-US',{month:'long',year:'numeric'});
-  const set=new Set(activeDates);
-  return(
-    <div style={{background:C.high,borderRadius:'10px',padding:'16px'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px'}}>
-        <button onClick={()=>setCalDate(new Date(year,month-1,1))} style={{background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:'18px',lineHeight:1,padding:'0 4px'}}>‹</button>
-        <span style={{fontSize:'12px',fontWeight:700}}>{label}</span>
-        <button onClick={()=>setCalDate(new Date(year,month+1,1))} style={{background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:'18px',lineHeight:1,padding:'0 4px'}}>›</button>
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px',textAlign:'center'}}>
-        {['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={{color:C.mut,fontSize:'10px',fontWeight:600,padding:'3px 0'}}>{d}</div>)}
-        {Array.from({length:first}).map((_,i)=><div key={'e'+i}/>)}
-        {Array.from({length:days}).map((_,i)=>{
-          const day=i+1;const ds=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-          const active=set.has(ds),isTod=ds===todayStr,isSel=ds===selectedDate;
-          return(<div key={day} onClick={()=>onSelect(ds)} style={{width:'26px',height:'26px',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'6px',margin:'1px auto',fontSize:'11px',cursor:'pointer',background:isSel?dotColor:active?dotColor+'22':isTod?C.bord:'transparent',color:isSel?'#fff':active?dotColor:isTod?C.text:C.mut,fontWeight:active||isTod?700:400,transition:'all 0.1s'}}>{day}</div>);
-        })}
-      </div>
-    </div>
-  );
-};
-
-// ─── SIDEBAR COMPONENTS ───────────────────────────────────────────────────────
-function NavItem({label,active,onClick,dot,sub}){
-  return(
-    <button onClick={onClick} style={{width:'100%',display:'flex',alignItems:'center',gap:'8px',padding:sub?'6px 10px':'8px 10px',borderRadius:'7px',background:active?C.accBg:'transparent',border:'none',color:active?C.acc:C.mut,fontFamily:'inherit',fontSize:sub?'12px':'13px',fontWeight:active?700:500,cursor:'pointer',textAlign:'left',marginBottom:'1px',transition:'all 0.1s'}}>
-      <span style={{flex:1}}>{label}</span>
-      {dot&&<span style={{width:'6px',height:'6px',borderRadius:'50%',background:C.suc,flexShrink:0}}/>}
-    </button>
-  );
-}
-function NavGroup({label,open,onClick,dot}){
-  return(
-    <button onClick={onClick} style={{width:'100%',display:'flex',alignItems:'center',gap:'6px',padding:'8px 10px',borderRadius:'7px',background:'transparent',border:'none',cursor:'pointer',marginBottom:'1px',fontFamily:'inherit'}}>
-      <span style={{flex:1,color:C.acc,fontSize:'13px',fontWeight:700,textAlign:'left'}}>{label}</span>
-      {dot&&<span style={{width:'6px',height:'6px',borderRadius:'50%',background:C.suc}}/>}
-      <span style={{color:C.mut,fontSize:'11px',transform:open?'rotate(90deg)':'none',display:'inline-block',transition:'transform 0.2s'}}>›</span>
-    </button>
-  );
-}
-function Divider(){return <div style={{height:'1px',background:C.bord,margin:'6px 0'}}/>;}
+// UI primitives and sidebar components are imported from "@/ui/primitives"
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function LifeOS(){
@@ -223,10 +133,10 @@ export default function LifeOS(){
   const [waterGoal,setWaterGoal]=useState(3000);
   const [wCustom,setWCustom]=useState('');
   const [waterDate,setWaterDate]=useState(toDay());
-  const [sleepLogs,setSleepLogs]=useState(iSleep);
+  const [sleepLogs,setSleepLogs]=useLocalStorageState('lifeos_sleep_logs', iSleep);
   const [sleepDate,setSleepDate]=useState(shiftDate(toDay(),-1));
   const [sleepForm,setSleepForm]=useState({start:'23:30',end:'07:00'});
-  const [crackerLogs,setCrackerLogs]=useState(iCracker);
+  const [crackerLogs,setCrackerLogs]=useLocalStorageState('lifeos_cracker_logs', iCracker);
   const [crackerDate,setCrackerDate]=useState(toDay());
   const [crackerForm,setCrackerForm]=useState({content:false,act:false,urge:false,note:''});
   const [vitamins,setVitamins]=useState(iVits);
@@ -271,6 +181,9 @@ export default function LifeOS(){
   const [htmlNoteForm,setHtmlNoteForm]=useState({ section:'fundamentals', name:'', file:null });
   const [htmlNoteModal,setHtmlNoteModal]=useState(null); // note row
   const [htmlNoteHtml,setHtmlNoteHtml]=useState(''); // fetched html
+
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const setAllDates=(dateStr)=>{
     setSelectedDate(dateStr);
@@ -348,48 +261,6 @@ export default function LifeOS(){
     };
     loadData();
   }, []);
-
-  // Persist sleep logs locally so they survive reloads without needing a Supabase table
-  useEffect(()=>{
-    try{
-      const raw=window.localStorage.getItem('lifeos_sleep_logs');
-      if(raw){
-        const parsed=JSON.parse(raw);
-        if(Array.isArray(parsed)) setSleepLogs(parsed);
-      }
-    }catch(e){
-      console.error('Error loading sleep logs from localStorage:', e);
-    }
-  },[]);
-
-  useEffect(()=>{
-    try{
-      window.localStorage.setItem('lifeos_sleep_logs',JSON.stringify(sleepLogs));
-    }catch(e){
-      console.error('Error saving sleep logs to localStorage:', e);
-    }
-  },[sleepLogs]);
-
-  // Persist Cracker logs (adult-content & related behaviour) locally
-  useEffect(()=>{
-    try{
-      const raw=window.localStorage.getItem('lifeos_cracker_logs');
-      if(raw){
-        const parsed=JSON.parse(raw);
-        if(Array.isArray(parsed)) setCrackerLogs(parsed);
-      }
-    }catch(e){
-      console.error('Error loading Cracker logs from localStorage:', e);
-    }
-  },[]);
-
-  useEffect(()=>{
-    try{
-      window.localStorage.setItem('lifeos_cracker_logs',JSON.stringify(crackerLogs));
-    }catch(e){
-      console.error('Error saving Cracker logs to localStorage:', e);
-    }
-  },[crackerLogs]);
 
   // Upload skin photo to Supabase Storage
   const uploadSkin = async (file, date) => {
@@ -572,6 +443,7 @@ export default function LifeOS(){
 
   const go=(v)=>{
     setView(v);
+    setMobileMenuOpen(false);
     if(['water','weight','sleep','cracker','vitamin','skin'].includes(v)) setWellnessOpen(true);
     if(['dsa','fundamentals','systemdesign','misc','interview','companies'].includes(v)) setLpaOpen(true);
   };
@@ -758,7 +630,10 @@ export default function LifeOS(){
 
   // ── SIDEBAR ──────────────────────────────────────────────────────────────────
   const Sidebar=()=>(
-    <div style={{width:'210px',minWidth:'210px',background:C.surf,borderRight:`1px solid ${C.bord}`,padding:'20px 10px',display:'flex',flexDirection:'column',position:'sticky',top:0,height:'100vh',overflowY:'auto'}}>
+    <div style={{
+      width:'210px',minWidth:'210px',background:C.surf,borderRight:`1px solid ${C.bord}`,padding:'20px 10px',display:'flex',flexDirection:'column',position:isMobile?'fixed':'sticky',top:0,height:'100vh',overflowY:'auto',zIndex:1001,
+      ...(isMobile?{left:mobileMenuOpen?0:'-210px',transition:'left 0.2s ease',boxShadow:mobileMenuOpen?'4px 0 20px rgba(0,0,0,0.3)':undefined}:{})
+    }}>
       <div style={{display:'flex',alignItems:'center',gap:'9px',padding:'0 8px 22px'}}>
         <div style={{width:'28px',height:'28px',background:C.acc,borderRadius:'7px',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,color:'#fff',fontSize:'14px'}}>L</div>
         <span style={{fontWeight:800,fontSize:'15px',letterSpacing:'-0.03em'}}>LifeOS</span>
@@ -1376,6 +1251,7 @@ export default function LifeOS(){
             </button>
           </div>
         </div>}
+        <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:'800px'}}>
           <thead><tr>
             <th style={{color:C.mut,fontSize:'11px',textAlign:'left',padding:'4px 8px',fontWeight:600,width:'180px'}}>Supplement</th>
@@ -1448,6 +1324,7 @@ export default function LifeOS(){
             </td>;})}
           </tr>)}</tbody>
         </table>
+        </div>
       </Card>
     </div>);
   };
@@ -2293,9 +2170,18 @@ export default function LifeOS(){
       a{text-decoration:none;}
       select option{background:${C.high};}
     `}</style>
+    {isMobile&&mobileMenuOpen&&(
+      <div role="button" tabIndex={0} onClick={()=>setMobileMenuOpen(false)} onKeyDown={(e)=>e.key==='Escape'&&setMobileMenuOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:1000}} aria-label="Close menu" />
+    )}
     <div style={{fontFamily:"'Plus Jakarta Sans',-apple-system,sans-serif",background:C.bg,color:C.text,minHeight:'100vh',display:'flex',fontSize:'14px'}}>
       {Sidebar()}
-      <div style={{flex:1,padding:'36px 44px',overflowY:'auto',maxHeight:'100vh'}}>
+      <div style={{flex:1,width:isMobile?'100%':undefined,padding:isMobile?'16px':'36px 44px',overflowY:'auto',maxHeight:'100vh'}}>
+        {isMobile&&(
+          <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'16px'}}>
+            <button type="button" onClick={()=>setMobileMenuOpen(true)} style={{background:C.surf,border:`1px solid ${C.bord}`,borderRadius:'8px',color:C.text,padding:'10px 14px',fontSize:'16px',cursor:'pointer',fontFamily:'inherit'}} aria-label="Open menu">☰ Menu</button>
+            <span style={{fontWeight:800,fontSize:'16px'}}>LifeOS</span>
+          </div>
+        )}
         {ActiveView()}
       </div>
     </div>

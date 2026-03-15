@@ -1,0 +1,22 @@
+export const C = {
+  bg: '#09090E',
+  surf: '#111119',
+  high: '#1A1A27',
+  bord: '#252538',
+  text: '#E2E2F0',
+  mut: '#5E5E7A',
+  acc: '#7B70FF',
+  accBg: 'rgba(123,112,255,0.1)',
+  accBord: 'rgba(123,112,255,0.3)',
+  suc: '#3DD6A3',
+  sucBg: 'rgba(61,214,163,0.1)',
+  war: '#F5A623',
+  warBg: 'rgba(245,166,35,0.1)',
+  dan: '#FF5E5E',
+  danBg: 'rgba(255,94,94,0.1)',
+  blue: '#60A5FA',
+  blueBg: 'rgba(96,165,250,0.1)',
+  pink: '#F472B6',
+  pinkBg: 'rgba(244,114,182,0.1)',
+};
+
