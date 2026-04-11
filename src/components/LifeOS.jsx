@@ -118,6 +118,9 @@ const iMisc={
   ],
 };
 
+/** Must match desktop sidebar `width` / off-canvas hide offset. */
+const SIDEBAR_WIDTH_PX = 210;
+
 // UI primitives and sidebar components are imported from "@/ui/primitives"
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
@@ -686,8 +689,8 @@ export default function LifeOS(){
   // ── SIDEBAR ──────────────────────────────────────────────────────────────────
   const Sidebar=()=>(
     <div style={{
-      width:'210px',minWidth:'210px',background:C.surf,borderRight:`1px solid ${C.bord}`,padding:'20px 10px',display:'flex',flexDirection:'column',position:isMobile?'fixed':'sticky',top:0,height:'100vh',overflowY:'auto',zIndex:1001,
-      ...(isMobile?{left:mobileMenuOpen?0:'-210px',transition:'left 0.2s ease',boxShadow:mobileMenuOpen?'4px 0 20px rgba(0,0,0,0.3)':undefined}:{})
+      width:`${SIDEBAR_WIDTH_PX}px`,minWidth:`${SIDEBAR_WIDTH_PX}px`,background:C.surf,borderRight:`1px solid ${C.bord}`,padding:'20px 10px',display:'flex',flexDirection:'column',position:isMobile?'fixed':'sticky',top:0,height:'100vh',overflowY:'auto',zIndex:1001,
+      ...(isMobile?{left:mobileMenuOpen?0:`-${SIDEBAR_WIDTH_PX}px`,transition:'left 0.2s ease',boxShadow:mobileMenuOpen?'4px 0 20px rgba(0,0,0,0.3)':undefined}:{})
     }}>
       <div style={{display:'flex',alignItems:'center',gap:'9px',padding:'0 8px 22px'}}>
         <div style={{width:'28px',height:'28px',background:C.acc,borderRadius:'7px',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,color:'#fff',fontSize:'14px'}}>L</div>
@@ -1904,11 +1907,16 @@ export default function LifeOS(){
         </div>
 
         {htmlNoteModal && (
-          <Modal fullscreen title={htmlNoteModal.name} onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}>
+          <Modal
+            fullscreen
+            fullscreenInsetLeft={isMobile ? 0 : SIDEBAR_WIDTH_PX}
+            title={htmlNoteModal.name}
+            onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}
+          >
             <div style={{border:`1px solid ${C.bord}`,borderRadius:'10px',overflow:'hidden',background:C.bg,flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
               <iframe
                 title={htmlNoteModal.name}
-                sandbox="allow-same-origin"
+                sandbox="allow-scripts allow-popups"
                 srcDoc={htmlNoteHtml || ''}
                 style={{width:'100%',flex:1,minHeight:0,border:'none',background:'#fff'}}
               />
@@ -1999,11 +2007,16 @@ export default function LifeOS(){
         </div>
 
         {htmlNoteModal && (
-          <Modal fullscreen title={htmlNoteModal.name} onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}>
+          <Modal
+            fullscreen
+            fullscreenInsetLeft={isMobile ? 0 : SIDEBAR_WIDTH_PX}
+            title={htmlNoteModal.name}
+            onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}
+          >
             <div style={{border:`1px solid ${C.bord}`,borderRadius:'10px',overflow:'hidden',background:C.bg,flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
               <iframe
                 title={htmlNoteModal.name}
-                sandbox="allow-same-origin"
+                sandbox="allow-scripts allow-popups"
                 srcDoc={htmlNoteHtml || ''}
                 style={{width:'100%',flex:1,minHeight:0,border:'none',background:'#fff'}}
               />

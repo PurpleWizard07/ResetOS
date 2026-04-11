@@ -239,7 +239,27 @@ export const PH = memo(function PH({ title, right }) {
   );
 });
 
-export const Modal = memo(function Modal({ children, onClose, title, fullscreen }) {
+export const Modal = memo(function Modal({
+  children,
+  onClose,
+  title,
+  fullscreen,
+  /** When fullscreen, offset overlay from the left (e.g. app sidebar width in px). 0 = full viewport. */
+  fullscreenInsetLeft = 0,
+}) {
+  const overlayPosition =
+    fullscreen && fullscreenInsetLeft
+      ? {
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left:
+            typeof fullscreenInsetLeft === "number"
+              ? `${fullscreenInsetLeft}px`
+              : fullscreenInsetLeft,
+        }
+      : { inset: 0 };
+
   const panelStyle = fullscreen
     ? {
         background: C.surf,
@@ -272,7 +292,7 @@ export const Modal = memo(function Modal({ children, onClose, title, fullscreen 
       onClick={onClose}
       style={{
         position: "fixed",
-        inset: 0,
+        ...overlayPosition,
         background: "rgba(0,0,0,0.75)",
         backdropFilter: "blur(4px)",
         display: "flex",
