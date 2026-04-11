@@ -239,7 +239,34 @@ export const PH = memo(function PH({ title, right }) {
   );
 });
 
-export const Modal = memo(function Modal({ children, onClose, title }) {
+export const Modal = memo(function Modal({ children, onClose, title, fullscreen }) {
+  const panelStyle = fullscreen
+    ? {
+        background: C.surf,
+        border: `1px solid ${C.bord}`,
+        borderRadius: "14px",
+        padding: "16px",
+        width: "100%",
+        maxWidth: "100%",
+        height: "calc(100dvh - 16px)",
+        maxHeight: "calc(100dvh - 16px)",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        boxSizing: "border-box",
+      }
+    : {
+        background: C.surf,
+        border: `1px solid ${C.bord}`,
+        borderRadius: "14px",
+        padding: "24px",
+        width: "100%",
+        maxWidth: "540px",
+        maxHeight: "85vh",
+        overflowY: "auto",
+      };
+
   return (
     <div
       onClick={onClose}
@@ -252,28 +279,17 @@ export const Modal = memo(function Modal({ children, onClose, title }) {
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
-        padding: "20px",
+        padding: fullscreen ? "8px" : "20px",
       }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: C.surf,
-          border: `1px solid ${C.bord}`,
-          borderRadius: "14px",
-          padding: "24px",
-          width: "100%",
-          maxWidth: "540px",
-          maxHeight: "85vh",
-          overflowY: "auto",
-        }}
-      >
+      <div onClick={(e) => e.stopPropagation()} style={panelStyle}>
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            marginBottom: "20px",
+            marginBottom: fullscreen ? "12px" : "20px",
+            flexShrink: 0,
           }}
         >
           <div style={{ fontWeight: 700, fontSize: "16px" }}>{title}</div>
@@ -292,7 +308,21 @@ export const Modal = memo(function Modal({ children, onClose, title }) {
             ×
           </button>
         </div>
-        {children}
+        {fullscreen ? (
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            {children}
+          </div>
+        ) : (
+          children
+        )}
       </div>
     </div>
   );

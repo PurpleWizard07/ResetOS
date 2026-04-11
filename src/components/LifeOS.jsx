@@ -1904,13 +1904,13 @@ export default function LifeOS(){
         </div>
 
         {htmlNoteModal && (
-          <Modal title={htmlNoteModal.name} onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}>
-            <div style={{border:`1px solid ${C.bord}`,borderRadius:'10px',overflow:'hidden',background:C.bg}}>
+          <Modal fullscreen title={htmlNoteModal.name} onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}>
+            <div style={{border:`1px solid ${C.bord}`,borderRadius:'10px',overflow:'hidden',background:C.bg,flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
               <iframe
                 title={htmlNoteModal.name}
                 sandbox="allow-same-origin"
                 srcDoc={htmlNoteHtml || ''}
-                style={{width:'100%',height:'70vh',border:'none',background:'#fff'}}
+                style={{width:'100%',flex:1,minHeight:0,border:'none',background:'#fff'}}
               />
             </div>
           </Modal>
@@ -1999,13 +1999,13 @@ export default function LifeOS(){
         </div>
 
         {htmlNoteModal && (
-          <Modal title={htmlNoteModal.name} onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}>
-            <div style={{border:`1px solid ${C.bord}`,borderRadius:'10px',overflow:'hidden',background:C.bg}}>
+          <Modal fullscreen title={htmlNoteModal.name} onClose={()=>{ setHtmlNoteModal(null); setHtmlNoteHtml(''); }}>
+            <div style={{border:`1px solid ${C.bord}`,borderRadius:'10px',overflow:'hidden',background:C.bg,flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
               <iframe
                 title={htmlNoteModal.name}
                 sandbox="allow-same-origin"
                 srcDoc={htmlNoteHtml || ''}
-                style={{width:'100%',height:'70vh',border:'none',background:'#fff'}}
+                style={{width:'100%',flex:1,minHeight:0,border:'none',background:'#fff'}}
               />
             </div>
           </Modal>
