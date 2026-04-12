@@ -2164,7 +2164,7 @@ export default function LifeOS(){
             <span style={{fontWeight:800,fontSize:'16px'}}>LifeOS</span>
           </div>
         )}
-        {ActiveView()}
+        <ActiveView />
       </div>
     </div>
   </>);
