@@ -143,16 +143,10 @@ export default function LifeOS(){
   const [crackerForm,setCrackerForm]=useState({content:false,act:false,urge:false,note:''});
   const [vitamins,setVitamins]=useState(iVits);
   const [vitaminLogs,setVitaminLogs]=useState(iVitLogs);
-  const [skinPhotos,setSkinPhotos]=useState({});
-  const [skinPending,setSkinPending]=useState({}); // { date: [{file, localUrl}] } — not yet saved
-  const [skinSaving,setSkinSaving]=useState(false);
   const [skinRoutineItems,setSkinRoutineItems]=useState([]); // { id, name, routine }
   const [skinRoutineLogs,setSkinRoutineLogs]=useState([]); // { id, item_id, date }
   const [skinRoutineForm,setSkinRoutineForm]=useState({ routine:'morning', name:'' });
   const [skinRoutineWeekAnchor,setSkinRoutineWeekAnchor]=useState(toDay());
-  const [skinCompareMode,setSkinCompareMode]=useState(false);
-  const [skinCmpA,setSkinCmpA]=useState('');
-  const [skinCmpB,setSkinCmpB]=useState('');
   const [journal,setJournal]=useState(iJournal);
   const [jForm,setJForm]=useState({title:'',content:''});
   const [jEditing,setJEditing]=useState(false);
@@ -216,7 +210,6 @@ export default function LifeOS(){
           companiesRes,
           systemDesignRes,
           interviewsRes,
-          skinPhotosRes,
           skinRoutineItemsRes,
           skinRoutineLogsRes,
           htmlNotesRes
@@ -233,7 +226,6 @@ export default function LifeOS(){
           supabase.from('companies').select('*'),
           supabase.from('system_design').select('*'),
           supabase.from('interviews').select('*').order('date', { ascending: false }),
-          supabase.from('skin_photos').select('*'),
           supabase.from('skin_routine_items').select('*').order('created_at', { ascending: true }),
           supabase.from('skin_routine_logs').select('*'),
           supabase.from('html_notes').select('*').order('created_at', { ascending: true })
@@ -255,19 +247,6 @@ export default function LifeOS(){
         if (companiesRes.data) setCompanies(companiesRes.data);
         if (systemDesignRes.data) setSystemDesign(systemDesignRes.data);
         if (interviewsRes.data) setInterviews(interviewsRes.data);
-        
-        // Convert skin photos array to map { date: url[] }
-        if (skinPhotosRes.data) {
-          const photoMap = skinPhotosRes.data.reduce((acc, row) => {
-            const url = row.photo_url || row.url || row.image_url || row.path;
-            if (url) {
-              if (!acc[row.date]) acc[row.date] = [];
-              acc[row.date].push({ url, id: row.id, path: row.path || row.storage_path });
-            }
-            return acc;
-          }, {});
-          setSkinPhotos(photoMap);
-        }
 
         if (skinRoutineItemsRes?.data) setSkinRoutineItems(skinRoutineItemsRes.data);
         if (skinRoutineLogsRes?.data) setSkinRoutineLogs(skinRoutineLogsRes.data);
@@ -278,81 +257,6 @@ export default function LifeOS(){
     };
     loadData();
   }, []);
-
-  // Stage files locally — no Supabase calls until saveSkinPhotos()
-  const handleSkin = (e, date) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    const newEntries = files.map(file => ({ file, localUrl: URL.createObjectURL(file), tempId: `temp_${Date.now()}_${Math.random()}` }));
-    setSkinPending(p => ({ ...p, [date]: [...(p[date]||[]), ...newEntries] }));
-    e.target.value = '';
-  };
-
-  // Remove a pending (not yet saved) photo
-  const removePending = (date, tempId) => {
-    setSkinPending(p => {
-      const updated = (p[date]||[]).filter(x=>x.tempId!==tempId);
-      if (!updated.length) { const n={...p}; delete n[date]; return n; }
-      return { ...p, [date]: updated };
-    });
-  };
-
-  // Upload all pending photos for a date and save to DB
-  const saveSkinPhotos = async (date) => {
-    const pending = skinPending[date] || [];
-    if (!pending.length) return;
-
-    // Verify session exists before attempting upload
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { alert('Not logged in — please refresh and sign in again.'); return; }
-
-    setSkinSaving(true);
-    try {
-      const saved = [];
-      for (const entry of pending) {
-        const storagePath = `${date}_${Date.now()}.jpg`;
-        const { error: uploadError } = await supabase.storage
-          .from('skin-photos')
-          .upload(storagePath, entry.file, { upsert: false });
-        if (uploadError) throw uploadError;
-
-        const { data: urlData, error: urlError } = await supabase.storage
-          .from('skin-photos')
-          .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
-        if (urlError) throw urlError;
-
-        const { data: inserted, error: dbError } = await supabase
-          .from('skin_photos')
-          .insert({ date, photo_url: urlData.signedUrl, path: storagePath })
-          .select()
-          .single();
-        if (dbError) throw dbError;
-
-        saved.push({ url: urlData.signedUrl, id: inserted.id, path: storagePath });
-      }
-      setSkinPhotos(p => ({ ...p, [date]: [...(p[date]||[]), ...saved] }));
-      setSkinPending(p => { const n={...p}; delete n[date]; return n; });
-    } catch (err) {
-      console.error('Error saving skin photos:', err);
-      alert(`Failed to save: ${err.message}`);
-    } finally {
-      setSkinSaving(false);
-    }
-  };
-
-  const deleteSkinPhoto = async (date, photo) => {
-    try {
-      if (photo.path) await supabase.storage.from('skin-photos').remove([photo.path]);
-      await supabase.from('skin_photos').delete().eq('id', photo.id);
-      setSkinPhotos(p => {
-        const updated = (p[date]||[]).filter(x=>x.id!==photo.id);
-        if (!updated.length) { const n={...p}; delete n[date]; return n; }
-        return { ...p, [date]: updated };
-      });
-    } catch (e) {
-      console.error('Error deleting skin photo:', e);
-    }
-  };
 
   const addSkinRoutineItem = async () => {
     if(!skinRoutineForm.name.trim()) return;
@@ -705,7 +609,7 @@ export default function LifeOS(){
         <NavItem label='Sleep' active={view==='sleep'} onClick={()=>go('sleep')} dot={sleepLogs.some(l=>l.date===lastNightStr)} sub/>
         <NavItem label='Cracker' active={view==='cracker'} onClick={()=>go('cracker')} dot={!!daysSinceSlip && daysSinceSlip>0} sub/>
         <NavItem label='Vitamins' active={view==='vitamin'} onClick={()=>go('vitamin')} sub/>
-        <NavItem label='Skin' active={view==='skin'} onClick={()=>go('skin')} dot={!!skinPhotos[todayStr]} sub/>
+        <NavItem label='Skin' active={view==='skin'} onClick={()=>go('skin')} sub/>
       </div>}
       <NavItem label='Strength' active={view==='strength'} onClick={()=>go('strength')} dot={todayWorkout}/>
       <Divider/>
@@ -1428,222 +1332,111 @@ export default function LifeOS(){
   };
 
   const VSkin=()=>{
-    const photoDatesSorted=Object.keys(skinPhotos).sort().reverse();
-    const totalPhotoCount = photoDatesSorted.reduce((s,d)=>s+(skinPhotos[d]||[]).length,0);
+    const skinCalActiveDates = useMemo(
+      () => [...new Set(skinRoutineLogs.map((l) => l.date))],
+      [skinRoutineLogs]
+    );
     const week7 = Array.from({length:7},(_,i)=>shiftDate(skinRoutineWeekAnchor, i-6));
     const isDone = (itemId, dateStr) => skinRoutineLogs.some(l=>l.item_id===itemId && l.date===dateStr);
     const itemsBy = (routine) => skinRoutineItems.filter(i=>i.routine===routine);
 
-    // Renders saved + pending photos for a date, with save button if pending exist
-    const PhotoGrid = ({ date }) => {
-      const saved = skinPhotos[date] || [];
-      const pending = skinPending[date] || [];
-      const hasPending = pending.length > 0;
-      return (
-        <div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'6px'}}>
-            {saved.map((photo,i)=>(
-              <div key={photo.id||i} style={{position:'relative',borderRadius:'8px',overflow:'hidden',border:`1px solid ${C.bord}`,aspectRatio:'1'}}>
-                <img src={photo.url} alt='' style={{width:'100%',height:'100%',objectFit:'cover'}}/>
-                <button
-                  onClick={()=>{ if(window.confirm('Delete this photo?')) deleteSkinPhoto(date, photo); }}
-                  style={{position:'absolute',top:'4px',right:'4px',background:'rgba(0,0,0,0.6)',border:'none',borderRadius:'50%',width:'22px',height:'22px',color:'#fff',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}
-                >✕</button>
-              </div>
-            ))}
-            {pending.map((entry)=>(
-              <div key={entry.tempId} style={{position:'relative',borderRadius:'8px',overflow:'hidden',border:`2px dashed ${C.war}`,aspectRatio:'1'}}>
-                <img src={entry.localUrl} alt='' style={{width:'100%',height:'100%',objectFit:'cover',opacity:0.75}}/>
-                <button
-                  onClick={()=>removePending(date, entry.tempId)}
-                  style={{position:'absolute',top:'4px',right:'4px',background:'rgba(0,0,0,0.6)',border:'none',borderRadius:'50%',width:'22px',height:'22px',color:'#fff',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}
-                >✕</button>
-                <div style={{position:'absolute',bottom:'4px',left:'4px',background:'rgba(0,0,0,0.55)',borderRadius:'4px',padding:'2px 5px',fontSize:'9px',color:C.war,fontWeight:700}}>pending</div>
-              </div>
-            ))}
-            <label style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',aspectRatio:'1',borderRadius:'8px',border:`2px dashed ${C.bord}`,cursor:'pointer',gap:'4px'}}>
-              <div style={{fontSize:'22px',color:C.mut}}>+</div>
-              <div style={{color:C.mut,fontSize:'10px'}}>Add</div>
-              <input type='file' accept='image/*' capture='environment' multiple style={{display:'none'}} onChange={e=>handleSkin(e,date)}/>
-            </label>
-          </div>
-          {hasPending&&<Btn onClick={()=>saveSkinPhotos(date)} full disabled={skinSaving} style={{marginTop:'10px'}}>
-            {skinSaving?'Saving…':`Save ${pending.length} photo${pending.length>1?'s':''}`}
-          </Btn>}
-        </div>
-      );
-    };
-
-    // Today's card
-    const TodayCard = () => {
-      const saved = skinPhotos[todayStr] || [];
-      const pending = skinPending[todayStr] || [];
-      const hasAny = saved.length > 0 || pending.length > 0;
-      return (
-        <Card>
-          <SLabel>Today — {fmt(todayStr)}</SLabel>
-          {hasAny
-            ? <PhotoGrid date={todayStr}/>
-            : <label style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',aspectRatio:'3/4',borderRadius:'10px',border:`2px dashed ${C.bord}`,cursor:'pointer',gap:'10px',marginTop:'8px'}}>
-                <div style={{fontSize:'32px',color:C.mut}}>+</div>
-                <div style={{color:C.mut,fontSize:'13px'}}>Add today's photo</div>
-                <input type='file' accept='image/*' capture='environment' multiple style={{display:'none'}} onChange={e=>handleSkin(e,todayStr)}/>
-              </label>
-          }
-        </Card>
-      );
-    };
-
     return(<div>
-      <PH title='Skin' right={<Btn onClick={()=>setSkinCompareMode(m=>!m)} variant={skinCompareMode?'accent':'ghost'} size='sm'>{skinCompareMode?'Exit Compare':'⇔ Compare'}</Btn>}/>
-      {skinCompareMode?(<Card>
-        <SLabel>Side-by-side comparison</SLabel>
-        <div style={{display:'flex',gap:'12px',marginBottom:'16px'}}>
-          <div style={{flex:1}}>
-            <div style={{color:C.mut,fontSize:'11px',marginBottom:'6px'}}>Date A</div>
-            <Sel value={skinCmpA} onChange={setSkinCmpA} options={[{v:'',l:'Select date'},...photoDatesSorted.map(d=>({v:d,l:fmt(d)}))]}/>
-          </div>
-          <div style={{flex:1}}>
-            <div style={{color:C.mut,fontSize:'11px',marginBottom:'6px'}}>Date B</div>
-            <Sel value={skinCmpB} onChange={setSkinCmpB} options={[{v:'',l:'Select date'},...photoDatesSorted.map(d=>({v:d,l:fmt(d)}))]}/>
-          </div>
-        </div>
-        {skinCmpA&&skinCmpB?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
-          {[skinCmpA,skinCmpB].map(d=>{
-            const photos = skinPhotos[d]||[];
-            return (<div key={d} style={{textAlign:'center'}}>
-              <div style={{color:C.mut,fontSize:'12px',fontWeight:600,marginBottom:'8px'}}>{fmtLong(d)}</div>
-              {photos.length===1
-                ? <img src={photos[0].url} alt='' style={{width:'100%',aspectRatio:'3/4',objectFit:'cover',borderRadius:'10px',border:`1px solid ${C.bord}`}}/>
-                : <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'4px'}}>
-                    {photos.map((p,i)=><img key={i} src={p.url} alt='' style={{width:'100%',aspectRatio:'1',objectFit:'cover',borderRadius:'6px',border:`1px solid ${C.bord}`}}/>)}
-                  </div>
-              }
-            </div>);
-          })}
-        </div>:<div style={{color:C.mut,textAlign:'center',padding:'40px'}}>Select two dates above to compare</div>}
-      </Card>):(
-        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
-          <div>
-            <TodayCard/>
+      <PH title='Skin'/>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:'20px'}}>
+        <div>
+          <div style={{display:'grid',gap:'12px'}}>
+            {(['morning','night']).map((r)=>(
+              <Card key={r} style={{padding:'16px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                  <SLabel>{r==='morning'?'Morning routine':'Night routine'}</SLabel>
+                  <Badge color='mut'>{itemsBy(r).length}</Badge>
+                </div>
 
-            <div style={{marginTop:'12px',display:'grid',gap:'12px'}}>
-              {(['morning','night']).map((r)=>(
-                <Card key={r} style={{padding:'16px'}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                    <SLabel>{r==='morning'?'Morning routine':'Night routine'}</SLabel>
-                    <Badge color='mut'>{itemsBy(r).length}</Badge>
-                  </div>
+                <div style={{display:'flex',gap:'8px',marginBottom:'10px'}}>
+                  <Input
+                    value={skinRoutineForm.routine===r ? skinRoutineForm.name : ''}
+                    onChange={(v)=>setSkinRoutineForm({ routine:r, name:v })}
+                    placeholder={r==='morning'?'Add item (e.g. sunscreen)':'Add item (e.g. retinol)'}
+                  />
+                  <Btn onClick={addSkinRoutineItem} disabled={skinRoutineForm.routine!==r || !skinRoutineForm.name.trim()}>Add</Btn>
+                </div>
 
-                  <div style={{display:'flex',gap:'8px',marginBottom:'10px'}}>
-                    <Input
-                      value={skinRoutineForm.routine===r ? skinRoutineForm.name : ''}
-                      onChange={(v)=>setSkinRoutineForm({ routine:r, name:v })}
-                      placeholder={r==='morning'?'Add item (e.g. sunscreen)':'Add item (e.g. retinol)'}
-                    />
-                    <Btn onClick={addSkinRoutineItem} disabled={skinRoutineForm.routine!==r || !skinRoutineForm.name.trim()}>Add</Btn>
-                  </div>
-
-                  {itemsBy(r).length===0 ? (
-                    <div style={{color:C.mut,fontSize:'12px'}}>No items yet.</div>
-                  ) : (
-                    <div style={{overflowX:'auto'}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',color:C.mut,fontSize:'11px'}}>
-                        <span>Week {fmt(week7[0])} – {fmt(week7[6])}</span>
-                        <div style={{display:'flex',gap:'6px'}}>
-                          <button type='button' onClick={()=>setSkinRoutineWeekAnchor(shiftDate(skinRoutineWeekAnchor,-7))} style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}>‹ Prev</button>
-                          <button type='button' onClick={()=>setSkinRoutineWeekAnchor(shiftDate(skinRoutineWeekAnchor,7))} style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}>Next ›</button>
-                        </div>
+                {itemsBy(r).length===0 ? (
+                  <div style={{color:C.mut,fontSize:'12px'}}>No items yet.</div>
+                ) : (
+                  <div style={{overflowX:'auto'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',color:C.mut,fontSize:'11px'}}>
+                      <span>Week {fmt(week7[0])} – {fmt(week7[6])}</span>
+                      <div style={{display:'flex',gap:'6px'}}>
+                        <button type='button' onClick={()=>setSkinRoutineWeekAnchor(shiftDate(skinRoutineWeekAnchor,-7))} style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}>‹ Prev</button>
+                        <button type='button' onClick={()=>setSkinRoutineWeekAnchor(shiftDate(skinRoutineWeekAnchor,7))} style={{background:'transparent',border:`1px solid ${C.bord}`,borderRadius:'6px',color:C.mut,fontSize:'11px',padding:'3px 8px',cursor:'pointer'}}>Next ›</button>
                       </div>
+                    </div>
 
-                      <table style={{width:'100%',borderCollapse:'collapse',minWidth:'560px'}}>
-                        <thead>
-                          <tr>
-                            <th style={{color:C.mut,fontSize:'11px',textAlign:'left',padding:'4px 8px',fontWeight:600,width:'180px'}}>Item</th>
+                    <table style={{width:'100%',borderCollapse:'collapse',minWidth:'560px'}}>
+                      <thead>
+                        <tr>
+                          <th style={{color:C.mut,fontSize:'11px',textAlign:'left',padding:'4px 8px',fontWeight:600,width:'180px'}}>Item</th>
+                          {week7.map(d=>{
+                            const dt=new Date(d+'T00:00');
+                            return (
+                              <th key={d} style={{color:d===todayStr?C.text:C.mut,fontSize:'10px',textAlign:'center',padding:'4px 6px',fontWeight:d===todayStr?700:500}}>
+                                <div>{getDayName(dt.getDay())}</div>
+                                <div style={{fontWeight:400,marginTop:'1px'}}>{dt.getDate()}</div>
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itemsBy(r).map(item=>(
+                          <tr key={item.id} style={{borderTop:`1px solid ${C.bord}`}}>
+                            <td style={{padding:'8px'}}>
+                              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'8px'}}>
+                                <span style={{fontWeight:600,fontSize:'13px'}}>{item.name}</span>
+                                <button onClick={()=>{ if(window.confirm('Delete this routine item?')) deleteSkinRoutineItem(item); }} style={{background:'transparent',border:'none',color:C.dan,cursor:'pointer',fontSize:'13px'}}>✕</button>
+                              </div>
+                            </td>
                             {week7.map(d=>{
-                              const dt=new Date(d+'T00:00');
+                              const done = isDone(item.id, d);
                               return (
-                                <th key={d} style={{color:d===todayStr?C.text:C.mut,fontSize:'10px',textAlign:'center',padding:'4px 6px',fontWeight:d===todayStr?700:500}}>
-                                  <div>{getDayName(dt.getDay())}</div>
-                                  <div style={{fontWeight:400,marginTop:'1px'}}>{dt.getDate()}</div>
-                                </th>
+                                <td key={d} style={{textAlign:'center',padding:'8px 6px'}}>
+                                  <button
+                                    onClick={()=>toggleSkinRoutine(item.id, d)}
+                                    style={{
+                                      width:'28px',
+                                      height:'28px',
+                                      borderRadius:'7px',
+                                      border: done ? `1px solid ${C.accBord}` : `1px solid ${C.bord}`,
+                                      background: done ? C.acc : 'transparent',
+                                      color: done ? '#fff' : C.mut,
+                                      cursor:'pointer',
+                                      fontSize:'14px',
+                                      fontWeight:800,
+                                      display:'inline-flex',
+                                      alignItems:'center',
+                                      justifyContent:'center'
+                                    }}
+                                  >
+                                    {done?'✓':'·'}
+                                  </button>
+                                </td>
                               );
                             })}
                           </tr>
-                        </thead>
-                        <tbody>
-                          {itemsBy(r).map(item=>(
-                            <tr key={item.id} style={{borderTop:`1px solid ${C.bord}`}}>
-                              <td style={{padding:'8px'}}>
-                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'8px'}}>
-                                  <span style={{fontWeight:600,fontSize:'13px'}}>{item.name}</span>
-                                  <button onClick={()=>{ if(window.confirm('Delete this routine item?')) deleteSkinRoutineItem(item); }} style={{background:'transparent',border:'none',color:C.dan,cursor:'pointer',fontSize:'13px'}}>✕</button>
-                                </div>
-                              </td>
-                              {week7.map(d=>{
-                                const done = isDone(item.id, d);
-                                return (
-                                  <td key={d} style={{textAlign:'center',padding:'8px 6px'}}>
-                                    <button
-                                      onClick={()=>toggleSkinRoutine(item.id, d)}
-                                      style={{
-                                        width:'28px',
-                                        height:'28px',
-                                        borderRadius:'7px',
-                                        border: done ? `1px solid ${C.accBord}` : `1px solid ${C.bord}`,
-                                        background: done ? C.acc : 'transparent',
-                                        color: done ? '#fff' : C.mut,
-                                        cursor:'pointer',
-                                        fontSize:'14px',
-                                        fontWeight:800,
-                                        display:'inline-flex',
-                                        alignItems:'center',
-                                        justifyContent:'center'
-                                      }}
-                                    >
-                                      {done?'✓':'·'}
-                                    </button>
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Card>
-              ))}
-            </div>
-          </div>
-          <div>
-            <Cal activeDates={Object.keys(skinPhotos)} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.pink}/>
-            {selectedDate&&(skinPhotos[selectedDate]||skinPending[selectedDate])&&selectedDate!==todayStr&&<Card style={{marginTop:'10px'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-                <SLabel>{fmtLong(selectedDate)}</SLabel>
-              </div>
-              <PhotoGrid date={selectedDate}/>
-            </Card>}
-            {photoDatesSorted.length>0&&<Card style={{marginTop:'10px'}}>
-              <SLabel>All photos ({totalPhotoCount})</SLabel>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'6px'}}>
-                {photoDatesSorted.slice(0,12).map(d=>{
-                  const photos=skinPhotos[d]||[];
-                  const first=photos[0];
-                  if(!first) return null;
-                  return (<div key={d} onClick={()=>setSelectedDate(d)} style={{cursor:'pointer',position:'relative',borderRadius:'6px',overflow:'hidden',border:`2px solid ${selectedDate===d?C.pink:C.bord}`}}>
-                    <img src={first.url} alt='' style={{width:'100%',aspectRatio:'1',objectFit:'cover'}}/>
-                    <div style={{position:'absolute',bottom:0,left:0,right:0,background:'linear-gradient(transparent,rgba(0,0,0,0.75))',padding:'4px 4px 3px',display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
-                      <span style={{color:'#fff',fontSize:'9px',fontWeight:600}}>{fmt(d)}</span>
-                      {photos.length>1&&<span style={{color:'rgba(255,255,255,0.8)',fontSize:'9px',fontWeight:600}}>+{photos.length-1}</span>}
-                    </div>
-                  </div>);
-                })}
-              </div>
-            </Card>}
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
+            ))}
           </div>
         </div>
-      )}
+        <div>
+          <Cal activeDates={skinCalActiveDates} selectedDate={selectedDate} onSelect={setAllDates} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.pink}/>
+        </div>
+      </div>
     </div>);
   };
 
