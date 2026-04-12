@@ -402,6 +402,11 @@ export default function LifeOS(){
     const goodDates=sleepLogs.filter(l=>l.durationHours>=7.5).map(l=>l.date);
     return calcStreak([...new Set(goodDates)]);
   },[sleepLogs]);
+  /** Skin calendar dots — must live here, not inside VSkin: view helpers are invoked as ActiveView() (see below). */
+  const skinCalActiveDates = useMemo(
+    () => [...new Set(skinRoutineLogs.map((l) => l.date))],
+    [skinRoutineLogs]
+  );
   const streaks=[{l:'DSA',v:dsaStreak,c:C.acc},{l:'Strength',v:workoutStreak,c:C.suc},{l:'Journal',v:journalStreak,c:C.war},{l:'Water',v:waterStreak,c:C.blue},{l:'Sleep',v:sleepStreak,c:C.pink}];
 
   const go=(v)=>{
@@ -1332,10 +1337,6 @@ export default function LifeOS(){
   };
 
   const VSkin=()=>{
-    const skinCalActiveDates = useMemo(
-      () => [...new Set(skinRoutineLogs.map((l) => l.date))],
-      [skinRoutineLogs]
-    );
     const week7 = Array.from({length:7},(_,i)=>shiftDate(skinRoutineWeekAnchor, i-6));
     const isDone = (itemId, dateStr) => skinRoutineLogs.some(l=>l.item_id===itemId && l.date===dateStr);
     const itemsBy = (routine) => skinRoutineItems.filter(i=>i.routine===routine);
@@ -2137,6 +2138,8 @@ export default function LifeOS(){
   };
 
   const ActiveView = views[view] || VDashboard;
+  /* Call as ActiveView(), not <ActiveView />: these fns are recreated every render; JSX would treat each as a
+     new component type, remount the subtree, and drop input focus after every keystroke. No hooks inside V*. */
 
   return(<>
     <style>{`
@@ -2164,7 +2167,7 @@ export default function LifeOS(){
             <span style={{fontWeight:800,fontSize:'16px'}}>LifeOS</span>
           </div>
         )}
-        <ActiveView />
+        {ActiveView()}
       </div>
     </div>
   </>);
