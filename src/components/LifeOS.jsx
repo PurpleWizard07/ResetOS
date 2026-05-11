@@ -444,6 +444,11 @@ export default function LifeOS(){
       setDsaForm({name:'',source:'LeetCode',link:'',tags:'',difficulty:'Medium',notes:''});
     }
   };
+  const deleteDSA=async(id)=>{
+    await supabase.from('dsa_problems').delete().eq('id', id);
+    setDsa(p=>p.filter(item=>item.id!==id));
+    if(expandedDsa===id) setExpandedDsa(null);
+  };
   const addPerf=async(dateOverride)=>{
     const targetDate = dateOverride || strengthDate || todayStr;
     const { data } = await supabase
@@ -1611,6 +1616,18 @@ export default function LifeOS(){
                   </div>
                   {p.notes?<div style={{background:C.bg,borderRadius:'8px',padding:'12px',color:C.mut,fontSize:'13px',lineHeight:1.75,whiteSpace:'pre-wrap',fontFamily:"'JetBrains Mono',monospace"}}>{p.notes}</div>
                   :<div style={{color:C.mut,fontSize:'12px'}}>No notes added.</div>}
+                  <div style={{display:'flex',justifyContent:'flex-end',marginTop:'10px'}}>
+                    <button
+                      onClick={async(e)=>{
+                        e.stopPropagation();
+                        if(!window.confirm('Delete this DSA entry?')) return;
+                        await deleteDSA(p.id);
+                      }}
+                      style={{background:'transparent',border:'none',color:C.dan,cursor:'pointer',fontSize:'13px',padding:0}}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>}
               </Card>);
             })}
