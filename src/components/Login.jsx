@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Mail, AlertCircle, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { C } from "@/ui/theme";
+import { C, RADIUS, SHADOW, SPRING_SOFT } from "@/ui/theme";
 import { Btn, Field, Input } from "@/ui/primitives";
+import { AmbientBackground } from "@/ui/AmbientBackground";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -45,7 +48,6 @@ export default function Login() {
     <div
       style={{
         fontFamily: "var(--font-plus-jakarta), -apple-system, system-ui, sans-serif",
-        background: C.bg,
         color: C.text,
         minHeight: "100vh",
         display: "flex",
@@ -54,14 +56,22 @@ export default function Login() {
         padding: "20px",
       }}
     >
-      <div
+      <AmbientBackground />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={SPRING_SOFT}
         style={{
-          background: C.surf,
+          position: "relative",
+          zIndex: 1,
+          background: C.glass,
+          backdropFilter: "blur(24px)",
           border: `1px solid ${C.bord}`,
-          borderRadius: "16px",
-          padding: "40px",
+          borderRadius: RADIUS.xl,
+          padding: "42px",
           width: "100%",
           maxWidth: "420px",
+          boxShadow: SHADOW.lg,
         }}
       >
         <div
@@ -69,7 +79,7 @@ export default function Login() {
             display: "flex",
             alignItems: "center",
             gap: "12px",
-            marginBottom: "32px",
+            marginBottom: "34px",
             justifyContent: "center",
           }}
         >
@@ -77,27 +87,54 @@ export default function Login() {
             style={{
               width: "40px",
               height: "40px",
-              background: C.acc,
-              borderRadius: "10px",
+              background: C.accGrad,
+              borderRadius: RADIUS.sm,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontWeight: 900,
-              color: "#fff",
+              fontWeight: 700,
+              color: C.onAccent,
               fontSize: "20px",
+              boxShadow: SHADOW.glow,
             }}
           >
             L
           </div>
-          <span style={{ fontWeight: 800, fontSize: "24px", letterSpacing: "-0.03em" }}>
+          <span style={{ fontFamily: "var(--font-fraunces)", fontWeight: 500, fontSize: "25px", letterSpacing: "-0.01em" }}>
             LifeOS
           </span>
         </div>
 
-        <h1 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "8px", textAlign: "center" }}>
+        <div
+          aria-hidden="true"
+          style={{
+            width: "46px",
+            height: "46px",
+            margin: "0 auto 18px",
+            borderRadius: "50%",
+            background: C.accBg,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: C.acc,
+          }}
+        >
+          <Mail size={20} />
+        </div>
+
+        <h1
+          style={{
+            fontFamily: "var(--font-fraunces)",
+            fontSize: "23px",
+            fontWeight: 500,
+            marginBottom: "8px",
+            textAlign: "center",
+            color: C.text,
+          }}
+        >
           Welcome back
         </h1>
-        <p style={{ color: C.mut, fontSize: "14px", marginBottom: "28px", textAlign: "center" }}>
+        <p style={{ color: C.mut, fontSize: "14px", marginBottom: "30px", textAlign: "center" }}>
           Sign in with your email to continue
         </p>
 
@@ -115,30 +152,44 @@ export default function Login() {
             </Field>
           </div>
 
-          <Btn type="submit" full disabled={loading || !email.trim()}>
+          <Btn type="submit" full loading={loading} disabled={!email.trim()}>
             {loading ? "Sending…" : "Send magic link"}
           </Btn>
         </form>
 
-        {message && (
-          <div
-            role="status"
-            style={{
-              marginTop: "20px",
-              padding: "12px 16px",
-              background: isError ? C.danBg : C.accBg,
-              border: `1px solid ${isError ? "rgba(255,94,94,0.3)" : C.accBord}`,
-              borderRadius: "10px",
-              color: isError ? C.dan : C.acc,
-              fontSize: "13px",
-              textAlign: "center",
-              lineHeight: 1.5,
-            }}
-          >
-            {message}
-          </div>
-        )}
-      </div>
+        <AnimatePresence>
+          {message && (
+            <motion.div
+              role="status"
+              initial={{ opacity: 0, height: 0, marginTop: 0 }}
+              animate={{ opacity: 1, height: "auto", marginTop: 20 }}
+              exit={{ opacity: 0, height: 0, marginTop: 0 }}
+              transition={SPRING_SOFT}
+              style={{ overflow: "hidden" }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  padding: "12px 16px",
+                  background: isError ? C.danBg : C.accBg,
+                  border: `1px solid ${isError ? "rgba(226,104,90,0.3)" : C.accBord}`,
+                  borderRadius: RADIUS.md,
+                  color: isError ? C.dan : C.acc,
+                  fontSize: "13px",
+                  lineHeight: 1.5,
+                }}
+              >
+                <span aria-hidden="true" style={{ flexShrink: 0, display: "flex", marginTop: "1px" }}>
+                  {isError ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
+                </span>
+                <span>{message}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }

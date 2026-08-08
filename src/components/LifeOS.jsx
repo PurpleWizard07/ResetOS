@@ -1,11 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Menu } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { C } from "@/ui/theme";
+import { C, RADIUS, SPRING_SOFT } from "@/ui/theme";
+import { AmbientBackground } from "@/ui/AmbientBackground";
 import { toDay, shiftDate, daysBetween, calcStreak } from "@/lib/dateUtils";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { WELLNESS_VIEWS, PREP_VIEWS } from "@/lib/navConfig";
+import { CommandPalette } from "@/components/CommandPalette";
+import { MilestoneCelebration } from "@/components/MilestoneCelebration";
+import { useMilestoneCelebration } from "@/hooks/useMilestoneCelebration";
 
 import { useWaterLogs } from "@/hooks/data/useWaterLogs";
 import { useSleepLogs } from "@/hooks/data/useSleepLogs";
@@ -37,14 +44,12 @@ import Companies from "@/components/views/Companies";
 import Weight from "@/components/views/Weight";
 import Journal from "@/components/views/Journal";
 
-const WELLNESS_VIEWS = ["water", "weight", "sleep", "cracker", "vitamin", "skin"];
-const PREP_VIEWS = ["dsa", "fundamentals", "systemdesign", "misc", "interview", "companies"];
-
 export default function LifeOS() {
   const [view, setView] = useState("dashboard");
   const [wellnessOpen, setWellnessOpen] = useState(false);
   const [lpaOpen, setLpaOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
 
   const [waterGoal, setWaterGoal] = useLocalStorageState("lifeos:waterGoal", 3000);
@@ -118,6 +123,8 @@ export default function LifeOS() {
     { l: "Sleep", v: sleepStreak, c: C.pink },
   ];
 
+  const { active: milestone, dismiss: dismissMilestone } = useMilestoneCelebration(streaks);
+
   const dots = {
     water: waterPct >= 100,
     weight: todayWeighedIn,
@@ -128,6 +135,16 @@ export default function LifeOS() {
     interview: interviews.interviews.some((i) => i.date === todayStr),
     journal: todayJournal,
   };
+
+  const dashboardLoading =
+    water.loading ||
+    sleep.loading ||
+    dsa.loading ||
+    journal.loading ||
+    strength.loading ||
+    weight.loading ||
+    interviews.loading ||
+    companies.loading;
 
   const interviewsToday = interviews.interviews.filter((i) => i.date === todayStr).length;
   const offers = companies.companies.filter((c) => c.status === "Offer").length;
@@ -146,6 +163,42 @@ export default function LifeOS() {
   };
 
   const fullscreenInsetLeft = isMobile ? 0 : SIDEBAR_WIDTH_PX;
+  const quickAddWater = (amount) => water.logAmount(amount, todayStr);
+
+  // A personal export: every table this account can see, gathered from the
+  // hooks already held in memory (no extra Supabase round-trip). HTML notes
+  // are listed by name/section only — their content lives in Storage, and
+  // pulling every note's body in just for an export is unlikely to be worth
+  // the extra network calls; the metadata is enough to know what exists.
+  const exportData = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      water: water.logs,
+      weight: weight.logs,
+      sleep: sleep.logs,
+      cracker: cracker.logs,
+      vitamins: vitamins.vitamins,
+      vitaminLogs: vitamins.vitaminLogs,
+      skinRoutineItems: skin.items,
+      skinRoutineLogs: skin.logs,
+      journal: journal.entries,
+      dsaProblems: dsa.problems,
+      strength: strength.logs,
+      companies: companies.companies,
+      systemDesign: systemDesign.topics,
+      interviews: interviews.interviews,
+      htmlNotes: htmlNotes.notes.map((n) => ({ name: n.name, section: n.section, created_at: n.created_at })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `lifeos-export-${todayStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const view$ = (() => {
     switch (view) {
@@ -155,6 +208,7 @@ export default function LifeOS() {
             isMobile={isMobile}
             todayStr={todayStr}
             logs={water.logs}
+            loading={water.loading}
             logAmount={water.logAmount}
             updateAmount={water.updateAmount}
             remove={water.remove}
@@ -163,16 +217,31 @@ export default function LifeOS() {
           />
         );
       case "weight":
-        return <Weight isMobile={isMobile} logs={weight.logs} logWeight={weight.logWeight} remove={weight.remove} />;
+        return (
+          <Weight isMobile={isMobile} logs={weight.logs} loading={weight.loading} logWeight={weight.logWeight} remove={weight.remove} />
+        );
       case "sleep":
-        return <Sleep isMobile={isMobile} todayStr={todayStr} logs={sleep.logs} save={sleep.save} remove={sleep.remove} />;
+        return (
+          <Sleep isMobile={isMobile} todayStr={todayStr} logs={sleep.logs} loading={sleep.loading} save={sleep.save} remove={sleep.remove} />
+        );
       case "cracker":
-        return <Cracker isMobile={isMobile} todayStr={todayStr} logs={cracker.logs} saveEntry={cracker.saveEntry} remove={cracker.remove} />;
+        return (
+          <Cracker
+            isMobile={isMobile}
+            todayStr={todayStr}
+            logs={cracker.logs}
+            loading={cracker.loading}
+            saveEntry={cracker.saveEntry}
+            remove={cracker.remove}
+          />
+        );
       case "vitamin":
         return (
           <Vitamins
+            isMobile={isMobile}
             vitamins={vitamins.vitamins}
             vitaminLogs={vitamins.vitaminLogs}
+            loading={vitamins.loading}
             save={vitamins.save}
             remove={vitamins.remove}
             toggleLog={vitamins.toggleLog}
@@ -185,6 +254,7 @@ export default function LifeOS() {
             todayStr={todayStr}
             items={skin.items}
             logs={skin.logs}
+            loading={skin.loading}
             addItem={skin.addItem}
             removeItem={skin.removeItem}
             toggleLog={skin.toggleLog}
@@ -197,6 +267,7 @@ export default function LifeOS() {
             todayStr={todayStr}
             streak={workoutStreak}
             logs={strength.logs}
+            loading={strength.loading}
             logWorkout={strength.logWorkout}
             update={strength.update}
             remove={strength.remove}
@@ -209,6 +280,7 @@ export default function LifeOS() {
             streak={dsaStreak}
             todayCount={todayDSA}
             problems={dsa.problems}
+            loading={dsa.loading}
             addProblem={dsa.addProblem}
             remove={dsa.remove}
           />
@@ -216,10 +288,12 @@ export default function LifeOS() {
       case "fundamentals":
         return (
           <HtmlNotesSection
+            isMobile={isMobile}
             title="Fundamentals"
             section="fundamentals"
             namePlaceholder="Note name (e.g. TCP Notes)"
             notes={htmlNotes.notes}
+            loading={htmlNotes.loading}
             upload={htmlNotes.upload}
             deleteNote={htmlNotes.deleteNote}
             fetchHtml={htmlNotes.fetchHtml}
@@ -227,14 +301,24 @@ export default function LifeOS() {
           />
         );
       case "systemdesign":
-        return <SystemDesign isMobile={isMobile} topics={systemDesign.topics} save={systemDesign.save} remove={systemDesign.remove} />;
+        return (
+          <SystemDesign
+            isMobile={isMobile}
+            topics={systemDesign.topics}
+            loading={systemDesign.loading}
+            save={systemDesign.save}
+            remove={systemDesign.remove}
+          />
+        );
       case "misc":
         return (
           <HtmlNotesSection
+            isMobile={isMobile}
             title="Miscellaneous"
             section="misc"
             namePlaceholder="Note name (e.g. Git Internals)"
             notes={htmlNotes.notes}
+            loading={htmlNotes.loading}
             upload={htmlNotes.upload}
             deleteNote={htmlNotes.deleteNote}
             fetchHtml={htmlNotes.fetchHtml}
@@ -242,14 +326,37 @@ export default function LifeOS() {
           />
         );
       case "interview":
-        return <Interview isMobile={isMobile} interviews={interviews.interviews} addInterview={interviews.addInterview} remove={interviews.remove} />;
+        return (
+          <Interview
+            isMobile={isMobile}
+            interviews={interviews.interviews}
+            loading={interviews.loading}
+            addInterview={interviews.addInterview}
+            remove={interviews.remove}
+          />
+        );
       case "companies":
         return (
-          <Companies isMobile={isMobile} companies={companies.companies} add={companies.add} update={companies.update} remove={companies.remove} />
+          <Companies
+            isMobile={isMobile}
+            companies={companies.companies}
+            loading={companies.loading}
+            add={companies.add}
+            update={companies.update}
+            remove={companies.remove}
+          />
         );
       case "journal":
         return (
-          <Journal isMobile={isMobile} todayStr={todayStr} streak={journalStreak} entries={journal.entries} save={journal.save} remove={journal.remove} />
+          <Journal
+            isMobile={isMobile}
+            todayStr={todayStr}
+            streak={journalStreak}
+            entries={journal.entries}
+            loading={journal.loading}
+            save={journal.save}
+            remove={journal.remove}
+          />
         );
       case "dashboard":
       default:
@@ -258,8 +365,9 @@ export default function LifeOS() {
             isMobile={isMobile}
             metrics={metrics}
             streaks={streaks}
+            loading={dashboardLoading}
             go={go}
-            quickAddWater={(amount) => water.logAmount(amount, todayStr)}
+            quickAddWater={quickAddWater}
           />
         );
     }
@@ -267,20 +375,31 @@ export default function LifeOS() {
 
   return (
     <>
-      <style>{`
-        ::selection { background: ${C.accBg}; }
-      `}</style>
-      {isMobile && mobileMenuOpen && (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setMobileMenuOpen(false)}
-          onKeyDown={(e) => e.key === "Escape" && setMobileMenuOpen(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000 }}
-          aria-label="Close menu"
-        />
-      )}
-      <div style={{ background: C.bg, color: C.text, minHeight: "100vh", display: "flex", fontSize: "14px" }}>
+      <AmbientBackground />
+      <CommandPalette
+        open={paletteOpen}
+        setOpen={setPaletteOpen}
+        go={go}
+        quickAddWater={quickAddWater}
+        exportData={exportData}
+      />
+      <MilestoneCelebration active={milestone} dismiss={dismissMilestone} />
+      <AnimatePresence>
+        {isMobile && mobileMenuOpen && (
+          <motion.div
+            role="button"
+            tabIndex={0}
+            onClick={() => setMobileMenuOpen(false)}
+            onKeyDown={(e) => e.key === "Escape" && setMobileMenuOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(2px)", zIndex: 1000 }}
+            aria-label="Close menu"
+          />
+        )}
+      </AnimatePresence>
+      <div style={{ position: "relative", zIndex: 1, color: C.text, minHeight: "100vh", display: "flex", fontSize: "14px" }}>
         <Sidebar
           view={view}
           go={go}
@@ -293,22 +412,50 @@ export default function LifeOS() {
           dots={dots}
           streaks={streaks}
           onSignOut={() => supabase.auth.signOut()}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onExportData={exportData}
         />
-        <div style={{ flex: 1, width: isMobile ? "100%" : undefined, padding: isMobile ? "16px" : "36px 44px", overflowY: "auto", maxHeight: "100vh" }}>
+        <div style={{ flex: 1, width: isMobile ? "100%" : undefined, padding: isMobile ? "16px" : "32px 40px", overflowY: "auto", maxHeight: "100vh" }}>
           {isMobile && (
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
-              <button
+              <motion.button
                 type="button"
                 onClick={() => setMobileMenuOpen(true)}
-                style={{ background: C.surf, border: `1px solid ${C.bord}`, borderRadius: "8px", color: C.text, padding: "10px 14px", fontSize: "16px", cursor: "pointer", fontFamily: "inherit" }}
+                whileHover={{ backgroundColor: C.high, borderColor: C.bordStrong }}
+                whileTap={{ scale: 0.96 }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: C.surf,
+                  border: `1px solid ${C.bord}`,
+                  borderRadius: RADIUS.md,
+                  color: C.text,
+                  padding: "10px 14px",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
                 aria-label="Open menu"
               >
-                ☰ Menu
-              </button>
-              <span style={{ fontWeight: 800, fontSize: "16px" }}>LifeOS</span>
+                <Menu size={18} aria-hidden="true" />
+                Menu
+              </motion.button>
+              <span style={{ fontWeight: 600, fontSize: "16px", fontFamily: "var(--font-fraunces)" }}>LifeOS</span>
             </div>
           )}
-          {view$}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={view}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={SPRING_SOFT}
+            >
+              {view$}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </>

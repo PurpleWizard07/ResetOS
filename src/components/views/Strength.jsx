@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Badge, Btn, Card, Cal, IconBtn, Input, Modal, PH, SLabel, Textarea, EmptyState, Field } from "@/ui/primitives";
+import { Badge, Btn, Card, Cal, HistoryList, IconBtn, Input, Modal, PH, SLabel, Textarea, Field, Skeleton } from "@/ui/primitives";
 import { C } from "@/ui/theme";
 import { fmtLong } from "@/lib/dateUtils";
 import { useConfirm } from "@/contexts/ConfirmContext";
@@ -30,29 +30,7 @@ function EditWorkoutModal({ log, onSave, onClose }) {
   );
 }
 
-function LogList({ logs, onEdit, onDelete, emptyText }) {
-  if (!logs.length) return <EmptyState pad="10px 0">{emptyText}</EmptyState>;
-  return logs.map((l, i) => (
-    <div key={l.id} style={{ padding: "10px 0", borderBottom: i < logs.length - 1 ? `1px solid ${C.bord}` : "none" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, color: C.suc, fontSize: "13px", marginBottom: "4px" }}>{l.type}</div>
-          {l.notes && <div style={{ color: C.mut, fontSize: "12px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{l.notes}</div>}
-        </div>
-        <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
-          <IconBtn label={`Edit ${l.type} workout`} onClick={() => onEdit(l)}>
-            Edit
-          </IconBtn>
-          <IconBtn label={`Delete ${l.type} workout`} danger bordered={false} onClick={() => onDelete(l)}>
-            ✕
-          </IconBtn>
-        </div>
-      </div>
-    </div>
-  ));
-}
-
-export default function Strength({ isMobile, todayStr, streak, logs, logWorkout, update, remove }) {
+export default function Strength({ isMobile, todayStr, streak, logs, logWorkout, update, remove, loading }) {
   const [activeDate, setActiveDate] = useState(todayStr);
   const [calDate, setCalDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -63,16 +41,34 @@ export default function Strength({ isMobile, todayStr, streak, logs, logWorkout,
   const activeDates = [...new Set(logs.map((l) => l.date))];
   const activeLogs = logs.filter((l) => l.date === activeDate);
   const selLogs = logs.filter((l) => l.date === selectedDate);
+  const showSkeleton = loading && logs.length === 0;
 
   const onDelete = async (l) => {
     if (await confirm("Delete this workout log?")) remove(l.id);
   };
 
+  const renderLogRow = (l) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, color: C.suc, fontSize: "13px", marginBottom: "4px" }}>{l.type}</div>
+        {l.notes && <div style={{ color: C.mut, fontSize: "12px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{l.notes}</div>}
+      </div>
+      <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+        <IconBtn label={`Edit ${l.type} workout`} onClick={() => setEditing(l)}>
+          Edit
+        </IconBtn>
+        <IconBtn label={`Delete ${l.type} workout`} danger bordered={false} onClick={() => onDelete(l)}>
+          ✕
+        </IconBtn>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <PH title="Strength" right={<Badge color="suc">{streak}d streak</Badge>} />
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "20px" }}>
-        <div>
+        <div className="anim-fade-in">
           <Card style={{ marginBottom: "12px" }}>
             <SLabel>Log workout</SLabel>
             <div style={{ display: "grid", gap: "8px" }}>
@@ -96,15 +92,24 @@ export default function Strength({ isMobile, todayStr, streak, logs, logWorkout,
           </Card>
           <Card>
             <SLabel>Logs for {activeDate === todayStr ? "today" : fmtLong(activeDate)}</SLabel>
-            <LogList logs={activeLogs} onEdit={setEditing} onDelete={onDelete} emptyText="No logs" />
+            {showSkeleton ? (
+              <div style={{ display: "grid", gap: "10px" }}>
+                <Skeleton height={14} width="35%" />
+                <Skeleton height={11} width="85%" />
+                <Skeleton height={14} width="40%" />
+                <Skeleton height={11} width="70%" />
+              </div>
+            ) : (
+              <HistoryList items={activeLogs} renderRow={renderLogRow} empty="No logs" />
+            )}
           </Card>
         </div>
-        <div>
+        <div className="anim-fade-in">
           <Cal activeDates={activeDates} selectedDate={selectedDate} onSelect={setSelectedDate} calDate={calDate} setCalDate={setCalDate} todayStr={todayStr} dotColor={C.suc} />
           {selLogs.length > 0 && selectedDate !== todayStr && (
             <Card style={{ marginTop: "10px" }}>
               <SLabel>{fmtLong(selectedDate)}</SLabel>
-              <LogList logs={selLogs} onEdit={setEditing} onDelete={onDelete} emptyText="No logs" />
+              <HistoryList items={selLogs} renderRow={renderLogRow} empty="No logs" />
             </Card>
           )}
         </div>

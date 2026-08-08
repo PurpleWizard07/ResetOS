@@ -15,6 +15,10 @@ export function ConfirmProvider({ children }) {
 
   const confirm = useCallback((message, opts = {}) => {
     return new Promise((resolve) => {
+      // A prior confirm() that hasn't been answered yet would otherwise be
+      // silently clobbered (its promise never resolving) — settle it as
+      // cancelled first so it never leaks.
+      if (resolver.current) resolver.current(false);
       resolver.current = resolve;
       setState({
         message,

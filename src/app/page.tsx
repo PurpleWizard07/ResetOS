@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { motion } from "motion/react";
+import { Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { C, RADIUS, SHADOW } from "@/ui/theme";
+import { AmbientBackground } from "@/ui/AmbientBackground";
 import LifeOS from "@/components/LifeOS";
 import Login from "@/components/Login";
 
@@ -41,16 +45,46 @@ export default function Home() {
       <div
         style={{
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
+          gap: "18px",
           minHeight: "100vh",
-          background: "#09090E",
-          color: "#E2E2F0",
+          color: C.text,
           fontFamily:
             "var(--font-plus-jakarta), -apple-system, system-ui, sans-serif",
         }}
       >
-        Loading...
+        <AmbientBackground />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          style={{
+            position: "relative",
+            zIndex: 1,
+            width: "42px",
+            height: "42px",
+            background: C.accGrad,
+            borderRadius: RADIUS.sm,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontWeight: 700,
+            color: C.onAccent,
+            fontSize: "20px",
+            boxShadow: SHADOW.glow,
+          }}
+        >
+          L
+        </motion.div>
+        <motion.span
+          aria-hidden="true"
+          style={{ position: "relative", zIndex: 1, display: "inline-flex", color: C.mut }}
+          animate={{ rotate: 360 }}
+          transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+        >
+          <Loader2 size={20} />
+        </motion.span>
       </div>
     );
   }

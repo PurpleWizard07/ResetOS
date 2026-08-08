@@ -1,48 +1,23 @@
 "use client";
 import { useCallback } from "react";
-import { supabase } from "@/lib/supabase";
-import { useSupabaseTable } from "@/hooks/useSupabaseTable";
-import { useToast } from "@/contexts/ToastContext";
+import { useParentChildTable } from "@/hooks/data/useParentChildTable";
 
 export function useSkinRoutine() {
-  const items = useSupabaseTable("skin_routine_items", {
-    orderBy: "created_at",
-    ascending: true,
-    label: "routine item",
+  const {
+    parent: items,
+    child: logs,
+    removeParent,
+    toggleChild,
+  } = useParentChildTable("skin_routine_items", "skin_routine_logs", "item_id", {
+    parent: { orderBy: "created_at", ascending: true, label: "routine item" },
+    child: { label: "routine log" },
   });
-  const logs = useSupabaseTable("skin_routine_logs", { label: "routine log" });
-  const { notifyError } = useToast();
 
-  const addItem = useCallback(
-    (routine, name) => items.add({ routine, name }),
-    [items]
-  );
+  const addItem = useCallback((routine, name) => items.add({ routine, name }), [items]);
 
-  const removeItem = useCallback(
-    async (item) => {
-      const { error } = await supabase
-        .from("skin_routine_logs")
-        .delete()
-        .eq("item_id", item.id);
-      if (error) {
-        notifyError("Could not delete routine logs", error);
-        return false;
-      }
-      const ok = await items.remove(item.id);
-      if (ok) logs.setRows((p) => p.filter((l) => l.item_id !== item.id));
-      return ok;
-    },
-    [items, logs, notifyError]
-  );
+  const removeItem = useCallback((item) => removeParent(item.id), [removeParent]);
 
-  const toggleLog = useCallback(
-    async (itemId, date) => {
-      const existing = logs.rows.find((l) => l.item_id === itemId && l.date === date);
-      if (existing) await logs.remove(existing.id);
-      else await logs.add({ item_id: itemId, date });
-    },
-    [logs]
-  );
+  const toggleLog = useCallback((itemId, date) => toggleChild(itemId, date), [toggleChild]);
 
   return {
     items: items.rows,

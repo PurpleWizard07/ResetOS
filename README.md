@@ -62,12 +62,20 @@ src/
     Login.jsx          Magic-link sign-in screen
     views/             One file per section (Water, Sleep, Dsa, Journal, ...)
   hooks/
-    data/              One hook per Supabase table (useWaterLogs, useDsa, ...)
+    data/              One hook per Supabase table (useWaterLogs, useDsa, ...);
+                        useParentChildTable.js is the shared base for the two
+                        item+logs pairs (vitamins, skin routine)
     useSupabaseTable.js Generic CRUD-over-a-table hook the data/ hooks build on
-  contexts/            ToastContext (surfaces failed requests), ConfirmContext
-                        (dialog-based replacement for window.confirm)
+    usePerDateForm.js  Shared "reload this form when the selected date (or its
+                        matching row) changes" hook, used by Cracker and Sleep
+  contexts/            ToastContext (a dismissible queue, not just one message
+                        at a time), ConfirmContext (dialog-based replacement
+                        for window.confirm)
   lib/                 supabase client, date utilities
-  ui/                  Shared visual primitives (Card, Btn, Modal, Cal, ...)
+  ui/                  Shared visual primitives (Card, Btn, Modal, Cal, Chip,
+                        DayToggle, WeekNav, HistoryList, Skeleton, ...) and the
+                        theme tokens (colors, shadows, spacing, motion) they're
+                        built from
 tests/                 Node's built-in test runner, no extra dependency
 supabase/schema.sql    Table definitions + RLS policies (see Setup above)
 ```

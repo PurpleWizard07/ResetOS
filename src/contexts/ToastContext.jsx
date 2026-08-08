@@ -1,14 +1,16 @@
 "use client";
-import React, { createContext, useCallback, useContext, useState } from "react";
-import { Toast } from "@/ui/primitives";
+import React, { createContext, useCallback, useContext, useRef, useState } from "react";
+import { ToastStack } from "@/ui/primitives";
 
 const ToastCtx = createContext(null);
 
 export function ToastProvider({ children }) {
-  const [toast, setToast] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const idRef = useRef(0);
 
   const notify = useCallback((msg, kind = "info") => {
-    setToast({ msg, kind, key: Date.now() });
+    const id = ++idRef.current;
+    setToasts((prev) => [...prev, { id, msg, kind }]);
   }, []);
 
   const notifyError = useCallback(
@@ -21,12 +23,14 @@ export function ToastProvider({ children }) {
     [notify]
   );
 
-  const dismiss = useCallback(() => setToast(null), []);
+  const dismiss = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   return (
     <ToastCtx.Provider value={{ notify, notifyError }}>
       {children}
-      <Toast toast={toast} onDismiss={dismiss} />
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </ToastCtx.Provider>
   );
 }
