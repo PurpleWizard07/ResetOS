@@ -11,13 +11,22 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
+    // getSession() rejects on a network failure or bad Supabase config.
+    // Previously that left the page stuck on "Loading…" forever, since
+    // setLoading(false) only ran inside the success branch. Falling through
+    // to the login screen on error at least gives the user something to
+    // retry instead of a page that never resolves.
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+      })
+      .catch((error) => {
+        console.error("Could not load auth session:", error);
+        setSession(null);
+      })
+      .finally(() => setLoading(false));
 
-    // Subscribe to auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -29,15 +38,18 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        background: '#09090E',
-        color: '#E2E2F0',
-        fontFamily: "var(--font-plus-jakarta), -apple-system, system-ui, sans-serif"
-      }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "100vh",
+          background: "#09090E",
+          color: "#E2E2F0",
+          fontFamily:
+            "var(--font-plus-jakarta), -apple-system, system-ui, sans-serif",
+        }}
+      >
         Loading...
       </div>
     );

@@ -20,3 +20,8 @@ export const C = {
   pinkBg: 'rgba(244,114,182,0.1)',
 };
 
+/** Font stacks. The variables are defined by next/font in app/layout.tsx. */
+export const SANS =
+  "var(--font-plus-jakarta), -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+export const MONO =
+  "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace";
