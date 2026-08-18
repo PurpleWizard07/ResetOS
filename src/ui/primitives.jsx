@@ -717,6 +717,13 @@ export const Modal = memo(function Modal({
   fullscreen,
   /** When fullscreen, offset the overlay from the left (e.g. sidebar width in px). */
   fullscreenInsetLeft = 0,
+  /**
+   * Widen a non-fullscreen dialog past the 540px default. For content that is
+   * a document rather than a form — where `fullscreen` would pin the panel to
+   * the window height and leave dead space under short content, but 540px is
+   * too cramped to lay out in columns.
+   */
+  maxWidth,
   /** Opt-in shared-element id — pairs with a `layoutId` on the element (e.g.
    * a Card) this modal should visually grow out of. Omit for a normal modal. */
   layoutId,
@@ -801,7 +808,7 @@ export const Modal = memo(function Modal({
         borderRadius: RADIUS.xl,
         padding: "26px",
         width: "100%",
-        maxWidth: "540px",
+        maxWidth: maxWidth || "540px",
         maxHeight: "85vh",
         overflowY: "auto",
         boxShadow: SHADOW.lg,

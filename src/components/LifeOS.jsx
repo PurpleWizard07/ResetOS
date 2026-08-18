@@ -85,6 +85,11 @@ export default function LifeOS() {
     [water.logs, todayStr]
   );
   const waterPct = Math.min(100, Math.round((todayWater / waterGoal) * 100));
+  // `dsa.problems` is the whole NeetCode 150 catalog, solved or not, so these
+  // two must not count rows — they count *solved dates*. A problem's `date` is
+  // null until you mark it solved and is the day you did (see
+  // supabase/schema.sql), which is exactly what both of these want: today's
+  // count is "solved today", and calcStreak already drops the nulls.
   const todayDSA = dsa.problems.filter((p) => p.date === todayStr).length;
   const todayJournal = journal.entries.some((e) => e.date === todayStr);
   const todayWorkout = strength.logs.some((l) => l.date === todayStr);
@@ -282,7 +287,19 @@ export default function LifeOS() {
             problems={dsa.problems}
             loading={dsa.loading}
             addProblem={dsa.addProblem}
+            updateProblem={dsa.updateProblem}
+            toggleSolved={dsa.toggleSolved}
+            markReviewed={dsa.markReviewed}
             remove={dsa.remove}
+            catalogStatus={dsa.catalogStatus}
+            seedCatalog={dsa.seedCatalog}
+            seeding={dsa.seeding}
+            approaches={dsa.approaches}
+            loadApproachDetails={dsa.loadApproachDetails}
+            addApproach={dsa.addApproach}
+            updateApproach={dsa.updateApproach}
+            removeApproach={dsa.removeApproach}
+            setPrimaryApproach={dsa.setPrimaryApproach}
           />
         );
       case "fundamentals":

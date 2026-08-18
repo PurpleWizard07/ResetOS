@@ -118,8 +118,12 @@ create table if not exists public.journal_entries (
 
 -- ── "40+ LPA" prep ───────────────────────────────────────────────────────
 
+-- id is uuid, not the bigint identity every other table in this file uses —
+-- confirmed by a dsa_approaches FK creation failing with a bigint/uuid type
+-- mismatch against the live table. Likely recreated via the dashboard's
+-- table editor at some point, which defaults new tables to a uuid PK.
 create table if not exists public.dsa_problems (
-  id bigint generated always as identity primary key,
+  id uuid not null default gen_random_uuid() primary key,
   date date not null,
   name text not null,
   source text,
@@ -130,6 +134,79 @@ create table if not exists public.dsa_problems (
   created_at timestamptz not null default now()
 );
 create index if not exists dsa_problems_date_idx on public.dsa_problems (date);
+
+-- Problem-level writeup fields. Additive: the original `notes` column stays
+-- and keeps rendering, so nothing already logged changes meaning.
+alter table public.dsa_problems
+  add column if not exists understanding text,
+  add column if not exists pattern text,
+  add column if not exists pitfalls text,
+  add column if not exists last_revised date;
+
+-- ── NeetCode 150 catalog ────────────────────────────────────────────────
+-- The DSA view is a NeetCode 150 tracker: all 150 problems exist as rows from
+-- the moment the catalog is seeded, and you work down them. That inverts what
+-- `date` used to mean. It was "the day I logged this problem", and every row
+-- had one because a row only existed once you had solved something. Now a row
+-- exists before you have touched it, so:
+--
+--   date IS NULL  -> not solved yet
+--   date = a day  -> the day you marked it solved
+--
+-- Solved state is therefore this one column, with no separate boolean that
+-- could drift out of agreement with it. `dsa_problems_date_idx` and the
+-- existing "recently solved" ordering both keep working unchanged.
+alter table public.dsa_problems alter column date drop not null;
+
+-- `slug` is the LeetCode URL slug ("two-sum") and the stable identity of a
+-- problem. src/lib/neetcode150.js is seeded by upserting on it, which is what
+-- makes re-seeding idempotent — a second run can never duplicate a problem.
+-- The unique index is partial because a hand-added problem of your own has no
+-- slug, and several NULLs must stay legal.
+alter table public.dsa_problems
+  add column if not exists slug text,
+  add column if not exists category text,
+  add column if not exists category_order smallint,
+  add column if not exists problem_order smallint;
+
+create unique index if not exists dsa_problems_slug_key
+  on public.dsa_problems (slug) where slug is not null;
+create index if not exists dsa_problems_order_idx
+  on public.dsa_problems (problem_order);
+
+-- The "Understanding" writeup, split into the three questions the detail view
+-- actually asks, because one big textarea labelled "understanding" gets left
+-- empty while three specific prompts get answered:
+--   restated     — what is the problem really asking?
+--   key_insight  — the one observation that unlocks it
+--   why_it_works — why is this approach correct?
+--
+-- These supersede the older single `understanding` column. It is intentionally
+-- left in place rather than dropped: dropping a column is irreversible, and an
+-- unused column costs nothing. Nothing reads or writes it any more.
+alter table public.dsa_problems
+  add column if not exists restated text,
+  add column if not exists key_insight text,
+  add column if not exists why_it_works text;
+
+-- One row per approach to a problem (brute force, better, optimal, ...).
+-- Ordered by sort_index, not created_at: the complexity ladder is the point,
+-- and you often add the optimal solution days after the brute force.
+-- `is_primary` marks the one you would reproduce under interview pressure.
+create table if not exists public.dsa_approaches (
+  id bigint generated always as identity primary key,
+  problem_id uuid not null references public.dsa_problems(id) on delete cascade,
+  sort_index int not null default 0,
+  label text not null,
+  idea text,
+  code text,
+  time_complexity text,
+  space_complexity text,
+  is_primary boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists dsa_approaches_problem_idx
+  on public.dsa_approaches (problem_id, sort_index);
 
 create table if not exists public.system_design (
   id bigint generated always as identity primary key,
@@ -210,8 +287,8 @@ begin
   for t in select unnest(array[
     'water_logs', 'sleep_logs', 'cracker_logs', 'vitamins', 'vitamin_logs',
     'skin_routine_items', 'skin_routine_logs', 'weight_logs', 'strength_logs',
-    'journal_entries', 'dsa_problems', 'system_design', 'interviews',
-    'companies'
+    'journal_entries', 'dsa_problems', 'dsa_approaches', 'system_design',
+    'interviews', 'companies'
   ])
   loop
     execute format('alter table public.%I enable row level security;', t);

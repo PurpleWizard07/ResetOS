@@ -11,10 +11,14 @@ import { useToast } from "@/contexts/ToastContext";
  *
  * `map` transforms a raw row (e.g. renaming duration_hours -> durationHours);
  * it is applied on load and on every insert/update so state is consistent.
+ *
+ * `select` narrows the initial fetch (default "*"). Pass an explicit column
+ * list to keep a heavy column (e.g. approach code) out of the eager mount
+ * fetch — load it separately, on demand, via a raw supabase call instead.
  */
 export function useSupabaseTable(
   table,
-  { orderBy, ascending = true, map, label } = {}
+  { orderBy, ascending = true, map, label, select = "*" } = {}
 ) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +29,7 @@ export function useSupabaseTable(
   useEffect(() => {
     let active = true;
     (async () => {
-      let q = supabase.from(table).select("*");
+      let q = supabase.from(table).select(select);
       if (orderBy) q = q.order(orderBy, { ascending });
       const { data, error } = await q;
       if (!active) return;
@@ -36,7 +40,7 @@ export function useSupabaseTable(
     return () => {
       active = false;
     };
-    // Intentionally mount-only: table/orderBy/map are static per hook instance.
+    // Intentionally mount-only: table/orderBy/map/select are static per hook instance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

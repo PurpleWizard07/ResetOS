@@ -42,7 +42,16 @@ Auth + Storage), built on Next.js.
    reading or writing data even if sign-ups are left open, but there's no
    reason to let strangers create accounts on your project at all.
 
-6. **Run it**
+6. **Seed the NeetCode 150.** If your database predates the DSA rework, also
+   run [`supabase/migrations/001_dsa_neetcode150.sql`](supabase/migrations/001_dsa_neetcode150.sql)
+   in the SQL editor — a fresh run of `schema.sql` already includes it. Then
+   open the DSA view and press **Import NeetCode 150**: it adds all 150
+   problems from `src/lib/neetcode150.js`, keyed on the LeetCode slug, and
+   clears any older hand-logged entries. The button is safe to press again at
+   any time — it only ever adds what is missing and refreshes titles/links,
+   never your own notes.
+
+7. **Run it**
 
    ```bash
    npm run dev
@@ -71,13 +80,17 @@ src/
   contexts/            ToastContext (a dismissible queue, not just one message
                         at a time), ConfirmContext (dialog-based replacement
                         for window.confirm)
-  lib/                 supabase client, date utilities
+  lib/                 supabase client, date utilities, and neetcode150.js —
+                        the canonical NeetCode 150 as static data (the database
+                        stores only your progress and writeups, never the list)
   ui/                  Shared visual primitives (Card, Btn, Modal, Cal, Chip,
                         DayToggle, WeekNav, HistoryList, Skeleton, ...) and the
                         theme tokens (colors, shadows, spacing, motion) they're
                         built from
 tests/                 Node's built-in test runner, no extra dependency
 supabase/schema.sql    Table definitions + RLS policies (see Setup above)
+supabase/migrations/   Standalone DDL for changes applied after the initial
+                        schema, for databases that already exist
 ```
 
 Each view under `src/components/views/` is a self-contained component with
