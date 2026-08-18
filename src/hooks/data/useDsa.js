@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useSupabaseTable } from "@/hooks/useSupabaseTable";
 import { useToast } from "@/contexts/ToastContext";
 import { supabase } from "@/lib/supabase";
@@ -75,6 +75,15 @@ export function useDsa() {
     };
   }, [rows]);
 
+  // Belt-and-braces against a double-click race: `seeding` state only disables
+  // the button after React re-renders, which is one tick too late to stop a
+  // second call fired in the same event-loop turn. Both invocations would
+  // otherwise compute the same "150 missing" snapshot and insert the same
+  // rows twice, in which case the second insert to reach any given slug hits
+  // the unique index and hard-fails that whole batch — which is exactly the
+  // shape of bug below, just from concurrency instead of a transient error.
+  const seedingRef = useRef(false);
+
   /**
    * Brings the database in line with src/lib/neetcode150.js. Safe to run any
    * number of times — it is keyed on `slug`, so it:
@@ -84,8 +93,20 @@ export function useDsa() {
    *   - refreshes the catalog columns (title/url/difficulty/category/order) on
    *     rows that are, and touches nothing else — your solved date, writeup,
    *     pitfalls, notes, pattern, tags and approaches all survive a re-run.
+   *
+   * Insertion is chunked (Postgres/PostgREST handle a 150-row insert far less
+   * happily than five 30-row ones), and every chunk is attempted even if an
+   * earlier one fails: each `insert` is committed the moment it succeeds, so
+   * a bug that stopped at the first error used to strand whatever had already
+   * landed — e.g. two good chunks committing 60 rows, a third chunk failing,
+   * and the run aborting before ever trying the remaining 90. Failing soft
+   * and continuing means one bad or timed-out chunk costs only itself, and
+   * pressing the button again (still perfectly safe — see above) mops up
+   * whatever didn't make it in.
    */
   const seedCatalog = useCallback(async () => {
+    if (seedingRef.current) return false;
+    seedingRef.current = true;
     setSeeding(true);
     try {
       const { data: existing, error: readErr } = await supabase.from("dsa_problems").select("id, slug");
@@ -100,21 +121,28 @@ export function useDsa() {
       const legacyIds = existing.filter((r) => !r.slug).map((r) => r.id);
       if (legacyIds.length) {
         const { error } = await supabase.from("dsa_problems").delete().in("id", legacyIds);
-        if (error) {
-          notifyError("Could not clear the old DSA entries", error);
-          return false;
-        }
+        if (error) notifyError("Could not clear the old DSA entries", error);
       }
 
       const have = new Set(existing.filter((r) => r.slug).map((r) => r.slug));
       const toInsert = NEETCODE_150.filter((p) => !have.has(p.slug)).map(seedRow);
+      let insertedCount = 0;
+      let insertError = null;
       for (const batch of chunk(toInsert, SEED_CHUNK)) {
-        const { error } = await supabase.from("dsa_problems").insert(batch);
+        // `ignoreDuplicates` turns "this slug already exists" from a hard
+        // failure (the whole 30-row batch rejected) into a silent no-op for
+        // just that row — the same protection a retry after a partial failure
+        // above relies on, and a second guard against the double-click race.
+        const { error, count } = await supabase
+          .from("dsa_problems")
+          .upsert(batch, { onConflict: "slug", ignoreDuplicates: true, count: "exact" });
         if (error) {
-          notifyError("Could not add the NeetCode problems", error);
-          return false;
+          insertError = error;
+          continue; // keep going — a later chunk failing here shouldn't cost the rest
         }
+        insertedCount += count ?? batch.length;
       }
+      if (insertError) notifyError("Some NeetCode problems could not be added — press Import again to retry", insertError);
 
       // Re-point rows that already existed at the current catalog text, so a
       // correction here reaches a database seeded before it was made.
@@ -123,31 +151,29 @@ export function useDsa() {
         stale.map((p) => supabase.from("dsa_problems").update(catalogFields(p)).eq("slug", p.slug))
       );
       const failed = results.find((r) => r.error);
-      if (failed) {
-        notifyError("Could not refresh problem details", failed.error);
-        return false;
-      }
+      if (failed) notifyError("Could not refresh some problem details", failed.error);
 
       // Re-read rather than patching state by hand: the inserts happened in
-      // batches and the updates by slug, so a fresh ordered fetch is both
-      // simpler and the only way to be sure state matches the database.
-      const { data, error } = await supabase
-        .from("dsa_problems")
-        .select("*")
-        .order("problem_order", { ascending: true });
+      // batches and the updates by slug, so a fresh fetch is both simpler and
+      // the only way to be sure state matches the database — always, even
+      // when a chunk above failed, so the screen never shows stale counts.
+      const { data, error } = await supabase.from("dsa_problems").select("*");
       if (error) {
-        notifyError("Problems were saved, but could not be re-loaded", error);
+        notifyError("Problems were saved, but could not be re-loaded — refresh the page", error);
         return false;
       }
       setRows(data);
-      notify(
-        toInsert.length
-          ? `Added ${toInsert.length} problem${toInsert.length === 1 ? "" : "s"} — NeetCode 150 is ready`
-          : "NeetCode 150 is already complete"
-      );
-      return true;
+      if (!insertError && !failed) {
+        notify(
+          insertedCount
+            ? `Added ${insertedCount} problem${insertedCount === 1 ? "" : "s"} — NeetCode 150 is ready`
+            : "NeetCode 150 is already complete"
+        );
+      }
+      return !insertError && !failed;
     } finally {
       setSeeding(false);
+      seedingRef.current = false;
     }
   }, [notify, notifyError, setRows]);
 
