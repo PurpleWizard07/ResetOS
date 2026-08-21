@@ -119,7 +119,8 @@ a {
 .input-control:hover {
   border-color: var(--bord-strong);
 }
-.input-control:focus {
+.input-control:focus,
+.input-control:focus-within {
   border-color: var(--acc);
 }
 
