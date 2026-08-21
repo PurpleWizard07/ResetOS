@@ -150,6 +150,22 @@ create table if not exists public.todos (
 create index if not exists todos_open_idx
   on public.todos (created_at desc) where not done;
 
+-- ── Schedule ─────────────────────────────────────────────────────────────
+-- A day-by-day time-block planner. Every row belongs to one specific date
+-- and is fully independent of every other row — "replicate" (copying one
+-- day's blocks onto other dates) just inserts plain copies, with no link
+-- back to the source day, so editing one day never touches another.
+
+create table if not exists public.schedule_entries (
+  id bigint generated always as identity primary key,
+  date date not null,
+  start_time text not null,
+  end_time text,
+  activity text not null check (length(trim(activity)) > 0),
+  created_at timestamptz not null default now()
+);
+create index if not exists schedule_entries_date_idx on public.schedule_entries (date);
+
 -- ── "40+ LPA" prep ───────────────────────────────────────────────────────
 
 -- id is uuid, not the bigint identity every other table in this file uses —
@@ -321,7 +337,7 @@ begin
   for t in select unnest(array[
     'water_logs', 'sleep_logs', 'cracker_logs', 'vitamins', 'vitamin_logs',
     'skin_routine_items', 'skin_routine_logs', 'weight_logs', 'strength_logs',
-    'journal_entries', 'todos', 'dsa_problems', 'dsa_approaches',
+    'journal_entries', 'todos', 'schedule_entries', 'dsa_problems', 'dsa_approaches',
     'system_design', 'interviews', 'companies'
   ])
   loop

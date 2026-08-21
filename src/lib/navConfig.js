@@ -1,6 +1,7 @@
 import {
   Briefcase,
   Building2,
+  CalendarClock,
   Code2,
   Dumbbell,
   Files,
@@ -31,6 +32,7 @@ import {
 export const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, group: null },
   { id: "todo", label: "To-Do", icon: ListTodo, group: null },
+  { id: "schedule", label: "Schedule", icon: CalendarClock, group: null },
   { id: "water", label: "Water", icon: Droplet, group: "Wellness" },
   { id: "weight", label: "Weight", icon: Scale, group: "Wellness" },
   { id: "sleep", label: "Sleep", icon: Moon, group: "Wellness" },

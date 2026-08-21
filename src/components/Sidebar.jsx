@@ -128,6 +128,7 @@ export default function Sidebar({
 
       {item("dashboard")}
       {item("todo")}
+      {item("schedule")}
       <Divider />
       <NavGroup
         label="Wellness"

@@ -21,6 +21,7 @@ import { useVitamins } from "@/hooks/data/useVitamins";
 import { useSkinRoutine } from "@/hooks/data/useSkinRoutine";
 import { useJournal } from "@/hooks/data/useJournal";
 import { useTodos } from "@/hooks/data/useTodos";
+import { useSchedule } from "@/hooks/data/useSchedule";
 import { useDsa } from "@/hooks/data/useDsa";
 import { useStrengthLogs } from "@/hooks/data/useStrengthLogs";
 import { useWeightLogs } from "@/hooks/data/useWeightLogs";
@@ -45,6 +46,7 @@ import Companies from "@/components/views/Companies";
 import Weight from "@/components/views/Weight";
 import Journal from "@/components/views/Journal";
 import Todo from "@/components/views/Todo";
+import Schedule from "@/components/views/Schedule";
 
 export default function LifeOS() {
   const [view, setView] = useState("dashboard");
@@ -65,6 +67,7 @@ export default function LifeOS() {
   const skin = useSkinRoutine();
   const journal = useJournal();
   const todos = useTodos();
+  const schedule = useSchedule();
   const dsa = useDsa();
   const strength = useStrengthLogs();
   const weight = useWeightLogs();
@@ -382,6 +385,19 @@ export default function LifeOS() {
             updateText={todos.updateText}
             setPriority={todos.setPriority}
             remove={todos.remove}
+          />
+        );
+      case "schedule":
+        return (
+          <Schedule
+            isMobile={isMobile}
+            todayStr={todayStr}
+            entries={schedule.entries}
+            loading={schedule.loading}
+            addEntry={schedule.addEntry}
+            updateEntry={schedule.updateEntry}
+            remove={schedule.remove}
+            replicateDay={schedule.replicateDay}
           />
         );
       case "journal":
