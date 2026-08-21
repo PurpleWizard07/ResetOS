@@ -20,6 +20,7 @@ import { useCrackerLogs } from "@/hooks/data/useCrackerLogs";
 import { useVitamins } from "@/hooks/data/useVitamins";
 import { useSkinRoutine } from "@/hooks/data/useSkinRoutine";
 import { useJournal } from "@/hooks/data/useJournal";
+import { useTodos } from "@/hooks/data/useTodos";
 import { useDsa } from "@/hooks/data/useDsa";
 import { useStrengthLogs } from "@/hooks/data/useStrengthLogs";
 import { useWeightLogs } from "@/hooks/data/useWeightLogs";
@@ -43,6 +44,7 @@ import Interview from "@/components/views/Interview";
 import Companies from "@/components/views/Companies";
 import Weight from "@/components/views/Weight";
 import Journal from "@/components/views/Journal";
+import Todo from "@/components/views/Todo";
 
 export default function LifeOS() {
   const [view, setView] = useState("dashboard");
@@ -62,6 +64,7 @@ export default function LifeOS() {
   const vitamins = useVitamins();
   const skin = useSkinRoutine();
   const journal = useJournal();
+  const todos = useTodos();
   const dsa = useDsa();
   const strength = useStrengthLogs();
   const weight = useWeightLogs();
@@ -130,6 +133,8 @@ export default function LifeOS() {
 
   const { active: milestone, dismiss: dismissMilestone } = useMilestoneCelebration(streaks);
 
+  const openTodoCount = todos.todos.filter((t) => !t.done).length;
+
   const dots = {
     water: waterPct >= 100,
     weight: todayWeighedIn,
@@ -139,6 +144,9 @@ export default function LifeOS() {
     dsa: todayDSA > 0,
     interview: interviews.interviews.some((i) => i.date === todayStr),
     journal: todayJournal,
+    // Lit whenever there's anything open — nudges you to the list without
+    // implying "you're behind"; an empty list simply has no dot.
+    todo: openTodoCount > 0,
   };
 
   const dashboardLoading =
@@ -361,6 +369,19 @@ export default function LifeOS() {
             add={companies.add}
             update={companies.update}
             remove={companies.remove}
+          />
+        );
+      case "todo":
+        return (
+          <Todo
+            isMobile={isMobile}
+            todos={todos.todos}
+            loading={todos.loading}
+            addTodo={todos.addTodo}
+            toggle={todos.toggle}
+            updateText={todos.updateText}
+            setPriority={todos.setPriority}
+            remove={todos.remove}
           />
         );
       case "journal":

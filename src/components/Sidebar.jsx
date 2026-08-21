@@ -127,6 +127,7 @@ export default function Sidebar({
       </motion.button>
 
       {item("dashboard")}
+      {item("todo")}
       <Divider />
       <NavGroup
         label="Wellness"

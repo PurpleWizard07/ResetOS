@@ -116,6 +116,40 @@ create table if not exists public.journal_entries (
   created_at timestamptz not null default now()
 );
 
+-- ── To-Do ────────────────────────────────────────────────────────────────
+-- A capture list, not a project manager. The point of the table is that a
+-- thought stops costing you attention the moment it is written down, so the
+-- insert path is deliberately cheap: `text` is the only column you must
+-- supply. Everything else has a default, which is what lets the UI add a row
+-- from a bare "type and press Enter" with no decisions attached.
+--
+-- Note there is no due date and no reminder column. Both were considered and
+-- left out: a due date on a captured thought turns a list you can trust into
+-- a list that generates guilt, which is the opposite of what this is for.
+
+create table if not exists public.todos (
+  id bigint generated always as identity primary key,
+  text text not null check (length(trim(text)) > 0),
+  done boolean not null default false,
+  -- Opt-in, not a required field at capture time. 'normal' is the default so
+  -- that adding something never asks you to rank it; you bump it to 'high'
+  -- later, if and when it actually matters.
+  priority text not null default 'normal'
+    check (priority in ('low', 'normal', 'high')),
+  created_at timestamptz not null default now(),
+  -- NULL while open; set to the moment you ticked it. Kept as its own column
+  -- rather than derived from `done` so the completed list can be ordered
+  -- "most recently finished first" — which is the only order that makes a
+  -- done pile feel like progress instead of a second backlog.
+  completed_at timestamptz
+);
+
+-- Open items are the only rows read on every mount, and they are the small
+-- slice of a list that grows forever. Partial index so the lookup cost stays
+-- flat as completed rows accumulate.
+create index if not exists todos_open_idx
+  on public.todos (created_at desc) where not done;
+
 -- ── "40+ LPA" prep ───────────────────────────────────────────────────────
 
 -- id is uuid, not the bigint identity every other table in this file uses —
@@ -287,8 +321,8 @@ begin
   for t in select unnest(array[
     'water_logs', 'sleep_logs', 'cracker_logs', 'vitamins', 'vitamin_logs',
     'skin_routine_items', 'skin_routine_logs', 'weight_logs', 'strength_logs',
-    'journal_entries', 'dsa_problems', 'dsa_approaches', 'system_design',
-    'interviews', 'companies'
+    'journal_entries', 'todos', 'dsa_problems', 'dsa_approaches',
+    'system_design', 'interviews', 'companies'
   ])
   loop
     execute format('alter table public.%I enable row level security;', t);
